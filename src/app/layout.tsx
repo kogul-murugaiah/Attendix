@@ -19,6 +19,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         {children}
+        <footer className="fixed bottom-0 w-full py-2 text-center text-[10px] text-gray-500/50 mix-blend-plus-lighter pointer-events-none z-50 font-mono">
+          © 2026 Attendix. All rights reserved. &nbsp;|&nbsp; Developed by Kogul Murugaiah
+        </footer>
         <Toaster />
       </body>
     </html>

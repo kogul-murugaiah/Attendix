@@ -341,7 +341,15 @@ export default function RegistrationForm() {
                                         <SelectContent className="bg-[#13131a] border-white/10 text-white max-h-[300px]">
                                             {events.length === 0 && <SelectItem value="dummy" disabled>No events available</SelectItem>}
                                             {events.map(event => (
-                                                <SelectItem key={event.id} value={event.id} className="focus:bg-purple-500/20 focus:text-white cursor-pointer">{event.event_name}</SelectItem>
+                                                <SelectItem
+                                                    key={event.id}
+                                                    value={event.id}
+                                                    disabled={!event.is_registration_open}
+                                                    className="focus:bg-purple-500/20 focus:text-white cursor-pointer data-[disabled]:opacity-50 data-[disabled]:cursor-not-allowed"
+                                                >
+                                                    {event.event_name}
+                                                    {!event.is_registration_open && " (Registration Closed)"}
+                                                </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>

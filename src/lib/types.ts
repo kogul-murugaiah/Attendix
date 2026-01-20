@@ -34,6 +34,7 @@ export type Event = {
     manager_email?: string | null
     max_capacity?: number | null
     current_attendance: number
+    is_registration_open: boolean
     created_at: string
 }
 

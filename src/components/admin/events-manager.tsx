@@ -30,7 +30,8 @@ export default function EventsManager() {
         venue: '',
         event_datetime: '', // datetime-local format
         max_capacity: 0,
-        manager_email: ''
+        manager_email: '',
+        is_registration_open: true
     })
 
     useEffect(() => {
@@ -46,7 +47,7 @@ export default function EventsManager() {
 
     const resetForm = () => {
         setFormData({
-            event_name: '', event_code: '', category: '', venue: '', event_datetime: '', max_capacity: 0, manager_email: ''
+            event_name: '', event_code: '', category: '', venue: '', event_datetime: '', max_capacity: 0, manager_email: '', is_registration_open: true
         })
         setEditingId(null)
     }
@@ -59,7 +60,8 @@ export default function EventsManager() {
             venue: event.venue,
             event_datetime: new Date(event.event_datetime).toISOString().slice(0, 16), // Format for datetime-local
             max_capacity: event.max_capacity || 0,
-            manager_email: event.manager_email || ''
+            manager_email: event.manager_email || '',
+            is_registration_open: event.is_registration_open ?? true
         })
         setEditingId(event.id)
         setOpen(true)
@@ -75,7 +77,8 @@ export default function EventsManager() {
             venue: formData.venue,
             event_datetime: new Date(formData.event_datetime).toISOString(),
             max_capacity: formData.max_capacity,
-            manager_email: formData.manager_email
+            manager_email: formData.manager_email,
+            is_registration_open: formData.is_registration_open
         }
 
         let error;
@@ -158,8 +161,19 @@ export default function EventsManager() {
                                 <Input type="datetime-local" required value={formData.event_datetime} onChange={e => setFormData({ ...formData, event_datetime: e.target.value })} className="bg-black/50 border-white/10 text-white [color-scheme:dark] focus:border-purple-500/50 focus:ring-purple-500/20 rounded-xl" />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-gray-400 text-xs uppercase tracking-wider font-medium">Capacity (0 for unlimited)</Label>
                                 <Input type="number" value={formData.max_capacity} onChange={e => setFormData({ ...formData, max_capacity: parseInt(e.target.value) || 0 })} className="bg-black/50 border-white/10 text-white focus:border-purple-500/50 focus:ring-purple-500/20 rounded-xl" />
+                            </div>
+                            <div className="flex items-center gap-3 pt-2">
+                                <input
+                                    type="checkbox"
+                                    id="reg_open"
+                                    checked={formData.is_registration_open}
+                                    onChange={e => setFormData({ ...formData, is_registration_open: e.target.checked })}
+                                    className="w-5 h-5 rounded-md border-white/10 bg-black/50 text-purple-600 focus:ring-purple-500/20"
+                                />
+                                <Label htmlFor="reg_open" className="text-gray-400 text-sm font-medium cursor-pointer select-none">
+                                    Registration Open
+                                </Label>
                             </div>
                             <Button type="submit" className="w-full bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-bold mt-4 rounded-xl shadow-lg shadow-purple-900/20">
                                 {editingId ? 'Save Changes' : 'Create Event'}
@@ -179,6 +193,7 @@ export default function EventsManager() {
                                 <TableHead className="text-gray-400 font-medium">Venue</TableHead>
                                 <TableHead className="text-gray-400 font-medium">Time</TableHead>
                                 <TableHead className="text-gray-400 font-medium">Attendance</TableHead>
+                                <TableHead className="text-gray-400 font-medium">Status</TableHead>
                                 <TableHead className="text-gray-400 font-medium text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -199,6 +214,14 @@ export default function EventsManager() {
                                             </div>
                                             <span className="text-xs font-mono text-gray-400">{e.current_attendance}/{e.max_capacity || '∞'}</span>
                                         </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${e.is_registration_open
+                                            ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                            : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                            }`}>
+                                            {e.is_registration_open ? 'Open' : 'Closed'}
+                                        </span>
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-2">

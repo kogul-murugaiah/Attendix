@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import Link from 'next/link'
 
 export default function LoginPage() {
     const [email, setEmail] = useState('')
@@ -32,57 +33,68 @@ export default function LoginPage() {
 
             const { user } = data;
             if (!user) {
-                toast.error('Login successful, but user data not found. Please try again.')
-                await supabase.auth.signOut()
+                toast.error('Login successful, but user data not found.')
                 return
             }
 
-            // Check staff role
             console.log('Auth User ID:', user.id)
 
-            // Fetch as list to debug count (single() can error if 0 or >1)
-            const { data: staffList, error: staffError } = await supabase
+            // 1. Check for Super Admin
+            const { data: superAdmin } = await supabase
+                .from('super_admins')
+                .select('id')
+                .eq('user_id', user.id)
+                .single()
+
+            if (superAdmin) {
+                router.push('/super-admin')
+                return
+            }
+
+            // 2. Check for Organization Admin
+            const { data: orgAdmin } = await supabase
+                .from('organization_admins')
+                .select('organization_id, organizations(org_code)')
+                .eq('user_id', user.id)
+                // If multiple orgs, we just pick the first one for now or a "select org" page (Phase 2)
+                // For now, assume single org for simplicity or redirect to dashboard of first one.
+                .limit(1)
+                .maybeSingle() // Use maybeSingle to avoid error if 0
+
+            if (orgAdmin && orgAdmin.organizations) {
+                // @ts-ignore
+                const orgCode = orgAdmin.organizations.org_code
+                router.push(`/${orgCode}/admin/dashboard`)
+                return
+            }
+
+            // 3. Check for Staff
+            const { data: staffList } = await supabase
                 .from('staff')
                 .select('*')
                 .eq('user_id', user.id)
 
-            if (staffError) {
-                console.error('Staff Query Error Object:', staffError)
-                console.error('Staff Query Error JSON:', JSON.stringify(staffError, null, 2))
-                toast.error(`Database error: ${staffError.message || 'Unknown'}`)
-                await supabase.auth.signOut()
+            if (staffList && staffList.length > 0) {
+                const staffData = staffList[0]
+                switch (staffData.role) {
+                    case 'gate_volunteer':
+                        router.push('/reception')
+                        break
+                    case 'event_manager':
+                        router.push('/event-scanner')
+                        break
+                    case 'admin':
+                        router.push('/admin') // Legacy route? Should probably be org dashboard too.
+                        break
+                    default:
+                        router.push('/')
+                }
                 return
             }
 
-            console.log('Staff Records Found:', staffList?.length)
-
-            if (!staffList || staffList.length === 0) {
-                console.error('No staff record found for user_id:', user.id)
-                console.warn('Please verify this UUID exists in the staff table.')
-                toast.error('Staff record not found. Please contact admin.')
-                await supabase.auth.signOut()
-                return
-            }
-
-            // Take the first matching record
-            const staffData = staffList[0]
-
-            toast.success('Login successful')
-
-            // Redirect based on role
-            switch (staffData.role) {
-                case 'gate_volunteer':
-                    router.push('/reception')
-                    break
-                case 'event_manager':
-                    router.push('/event-scanner')
-                    break
-                case 'admin':
-                    router.push('/admin')
-                    break
-                default:
-                    router.push('/')
-            }
+            // 4. Fallback: New User -> Onboarding
+            // If they have no roles, they probably just signed up to create an org.
+            router.push('/onboarding')
 
         } catch (err) {
             toast.error('An unexpected error occurred')
@@ -109,7 +121,7 @@ export default function LoginPage() {
                     <div className="mx-auto w-12 h-12 rounded-full bg-gradient-to-r from-purple-500 to-cyan-500 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/30">
                         <span className="text-white font-bold text-xl">A</span>
                     </div>
-                    <CardTitle className="text-2xl font-bold text-white">Staff Portal</CardTitle>
+                    <CardTitle className="text-2xl font-bold text-white">Welcome Back</CardTitle>
                     <CardDescription className="text-gray-400">Enter your credentials to access the system.</CardDescription>
                 </CardHeader>
                 <form onSubmit={handleLogin}>
@@ -119,7 +131,7 @@ export default function LoginPage() {
                             <Input
                                 id="email"
                                 type="email"
-                                placeholder="staff@example.com"
+                                placeholder="name@example.com"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -138,7 +150,7 @@ export default function LoginPage() {
                             />
                         </div>
                     </CardContent>
-                    <CardFooter className="px-8 pb-8 pt-4">
+                    <CardFooter className="px-8 pb-8 pt-4 flex-col gap-4">
                         <Button
                             type="submit"
                             className="w-full h-11 font-bold bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white shadow-lg shadow-purple-900/20 rounded-xl transition-all hover:scale-[1.02]"
@@ -146,6 +158,13 @@ export default function LoginPage() {
                         >
                             {loading ? 'Logging in...' : 'Access Dashboard'}
                         </Button>
+
+                        <div className="text-center text-sm text-gray-400">
+                            Don't have an account?{' '}
+                            <Link href="/register" className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">
+                                Sign Up
+                            </Link>
+                        </div>
                     </CardFooter>
                 </form>
             </Card>

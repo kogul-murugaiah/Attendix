@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
+import { useOrganization } from '@/context/organization-context'
 import {
     Table,
     TableBody,
@@ -17,6 +18,9 @@ import { Check, X, Loader2 } from 'lucide-react'
 import { toast } from "sonner"
 
 export default function AttendanceManager() {
+    const { organization } = useOrganization()
+    // stable instance to prevent subscription drops
+    const [supabase] = useState(() => createClient())
     const [participants, setParticipants] = useState<Participant[]>([])
     const [events, setEvents] = useState<Event[]>([])
     const [search, setSearch] = useState('')
@@ -24,6 +28,13 @@ export default function AttendanceManager() {
     const [processingId, setProcessingId] = useState<string | null>(null)
 
     useEffect(() => {
+        console.log("Admin: AttendanceManager MOUNTED. Org ID:", organization?.id)
+        if (!organization?.id) {
+            console.log("Admin: No Organization ID yet. Waiting...")
+            return
+        }
+
+        console.log("Admin: Initializing Subscriptions for Org:", organization.id)
         fetchData()
 
         const channel = supabase
@@ -31,33 +42,59 @@ export default function AttendanceManager() {
             .on(
                 'postgres_changes',
                 {
-                    event: 'UPDATE',
+                    event: '*',
                     schema: 'public',
-                    table: 'participants'
+                    table: 'event_registrations', // Listen for event attendance updates
                 },
                 (payload) => {
-                    const updatedParticipant = payload.new as Participant
-                    setParticipants((currentParticipants) => {
-                        const exists = currentParticipants.find(p => p.id === updatedParticipant.id)
-                        if (exists) {
-                            return currentParticipants.map(p =>
-                                p.id === updatedParticipant.id ? updatedParticipant : p
-                            )
-                        }
-                        return currentParticipants
-                    })
+                    // We just re-fetch participants to keep it simple and consistent with the join
+                    fetchParticipants()
+                }
+            )
+            .subscribe()
+
+        const studentChannel = supabase
+            .channel('admin-student-changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'student_registrations',
+                    filter: `organization_id=eq.${organization.id}`
+                },
+                (payload) => {
+                    fetchParticipants()
+                }
+            )
+            .subscribe()
+
+        // --- GLOBAL BROADCAST LISTENER (Direct Line) ---
+        const globalChannel = supabase
+            .channel('app-global')
+            .on(
+                'broadcast',
+                { event: 'new-registration' },
+                (payload) => {
+                    // Check if this alert is for MY organization
+                    if (payload.payload.organization_id === organization.id) {
+                        fetchParticipants()
+                    }
                 }
             )
             .subscribe()
 
         return () => {
             supabase.removeChannel(channel)
+            supabase.removeChannel(studentChannel)
+            supabase.removeChannel(globalChannel)
         }
-    }, [])
+    }, [organization?.id])
 
     const fetchData = async () => {
+        if (!organization?.id) return
         setLoading(true)
-        const { data: eventsData } = await supabase.from('events').select('*')
+        const { data: eventsData } = await supabase.from('events').select('*').eq('organization_id', organization.id)
         if (eventsData) setEvents(eventsData)
 
         await fetchParticipants()
@@ -65,17 +102,41 @@ export default function AttendanceManager() {
     }
 
     const fetchParticipants = async () => {
-        let query = supabase.from('participants').select('*').order('created_at', { ascending: false })
+        if (!organization) return
+        let query = supabase.from('student_registrations').select('*, event_registrations(*)').eq('organization_id', organization.id).order('created_at', { ascending: false })
         if (search) {
-            query = query.ilike('name', `%${search}%`)
+            query = query.or(`full_name.ilike.%${search}%,participant_code.ilike.%${search}%`)
         }
-        query = query.limit(50) // Pagination limit
+        query = query.limit(50)
 
-        const { data } = await query
-        if (data) setParticipants(data as Participant[])
+        const { data, error } = await query
+        if (data) {
+            // Map student_registrations to Participant type locally for UI consistency
+            const mappedParticipants: Participant[] = data.map((r: any) => ({
+                id: r.id,
+                name: r.full_name,
+                email: r.email,
+                phone: r.phone,
+                participant_code: r.participant_code || r.qr_code,
+                register_number: r.register_number,
+                organization_id: r.organization_id,
+                gate_entry_status: r.checked_in,
+                gate_entry_timestamp: r.checked_in_at,
+                // Map Joined Event Data
+                events: r.event_registrations.map((er: any) => ({
+                    event_id: er.event_id,
+                    attendance_status: er.attendance_status,
+                    scanned_at: er.scanned_at
+                })),
+                created_at: r.created_at,
+                custom_data: r.custom_data,
+                status: r.status
+            }))
+            setParticipants(mappedParticipants)
+        }
     }
 
-    const getEventName = (id: string | null | undefined) => {
+    const getEventName = (id: string) => {
         if (!id) return undefined
         return events.find(e => e.id === id)?.event_name
     }
@@ -87,10 +148,11 @@ export default function AttendanceManager() {
         // Get staff ID
         const { data: staff } = await supabase.from('staff').select('id').eq('user_id', user.id).single()
 
-        if (staff) {
+        if (true) {
             await supabase.from('scan_logs').insert({
+                organization_id: organization.id,
                 participant_id: participantId,
-                scanned_by: staff.id,
+                scanned_by: staff?.id || null, // Allow admin override without staff record
                 scan_type: 'admin_override',
                 status: status,
                 event_id: eventId || null,
@@ -103,11 +165,12 @@ export default function AttendanceManager() {
         const newValue = !p.gate_entry_status
         setProcessingId(p.id + 'reception')
 
+        // Update checked_in column
         const { error } = await supabase
-            .from('participants')
+            .from('student_registrations')
             .update({
-                gate_entry_status: newValue,
-                gate_entry_timestamp: newValue ? new Date().toISOString() : null
+                checked_in: newValue,
+                checked_in_at: newValue ? new Date().toISOString() : null
             })
             .eq('id', p.id)
 
@@ -119,42 +182,67 @@ export default function AttendanceManager() {
             ))
             toast.success(`Reception status: ${newValue ? 'ENTERED' : 'REMOVED'}`)
 
-            // Log the action
             await logAdminAction(p.id, 'gate_entry', newValue ? 'admin_update' : 'removed')
         }
         setProcessingId(null)
     }
 
-    const toggleEventAttendance = async (p: Participant, eventNum: 1 | 2 | 3) => {
-        const eventId = p[`event${eventNum}_id` as keyof Participant] as string
-        if (!eventId) return
+    const toggleEventAttendance = async (p: Participant, eventId: string) => {
+        const registration = p.events?.find(e => e.event_id === eventId)
 
-        const currentStatus = p[`event${eventNum}_attendance` as keyof Participant] as boolean
+        const currentStatus = registration?.attendance_status || false
         const newValue = !currentStatus
-        setProcessingId(p.id + `event${eventNum}`)
+        setProcessingId(p.id + eventId)
 
-        const updateData = {
-            [`event${eventNum}_attendance`]: newValue,
-            [`event${eventNum}_timestamp`]: newValue ? new Date().toISOString() : null
-        }
+        try {
+            // 1. Get Staff ID for 'scanned_by'
+            const { data: { user } } = await supabase.auth.getUser()
+            let staffId = null
+            if (user) {
+                const { data: staff } = await supabase.from('staff').select('id').eq('user_id', user.id).single()
+                staffId = staff?.id
+            }
 
-        const { error } = await supabase
-            .from('participants')
-            .update(updateData)
-            .eq('id', p.id)
+            // 2. Perform Update/Insert
+            let error
 
-        if (error) {
-            toast.error('Failed to update event attendance')
-        } else {
-            setParticipants(participants.map(part =>
-                part.id === p.id ? { ...part, [`event${eventNum}_attendance`]: newValue } : part
-            ))
-            toast.success(`Attendance updated for Event ${eventNum}`)
+            if (!registration) {
+                // Insert new registration
+                const { error: insertError } = await supabase
+                    .from('event_registrations')
+                    .insert({
+                        participant_id: p.id,
+                        event_id: eventId,
+                        attendance_status: newValue,
+                        scanned_by: staffId // Use correct Foreign Key
+                    })
+                error = insertError
+            } else {
+                // Update existing
+                const { error: updateError } = await supabase
+                    .from('event_registrations')
+                    .update({
+                        attendance_status: newValue,
+                        scanned_at: newValue ? new Date().toISOString() : null,
+                        scanned_by: staffId // Use correct Foreign Key
+                    })
+                    .eq('participant_id', p.id)
+                    .eq('event_id', eventId)
+                error = updateError
+            }
 
-            // Log the action
+            if (error) throw error
+
+            toast.success(`Attendance updated`)
+            fetchParticipants()
             await logAdminAction(p.id, 'event_attendance', newValue ? 'admin_update' : 'removed', eventId)
+
+        } catch (err: any) {
+            console.error("Attendance Update Error:", err)
+            toast.error(err.message || 'Failed to update event attendance')
+        } finally {
+            setProcessingId(null)
         }
-        setProcessingId(null)
     }
 
     const StatusBadge = ({ active, onClick, loading, label }: any) => (
@@ -206,9 +294,11 @@ export default function AttendanceManager() {
                             <TableRow className="border-white/5 hover:bg-transparent">
                                 <TableHead className="text-gray-400 font-medium w-[200px]">Participant</TableHead>
                                 <TableHead className="text-gray-400 font-medium text-center w-[160px]">Reception</TableHead>
-                                <TableHead className="text-gray-400 font-medium text-center w-[160px]">Event 1</TableHead>
-                                <TableHead className="text-gray-400 font-medium text-center w-[160px]">Event 2</TableHead>
-                                <TableHead className="text-gray-400 font-medium text-center w-[160px]">Event 3</TableHead>
+                                {events.map(event => (
+                                    <TableHead key={event.id} className="text-gray-400 font-medium text-center min-w-[140px]">
+                                        {event.event_name}
+                                    </TableHead>
+                                ))}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -228,27 +318,23 @@ export default function AttendanceManager() {
                                             onClick={() => toggleReception(p)}
                                         />
                                     </TableCell>
-                                    {[1, 2, 3].map((num) => {
-                                        const eventId = p[`event${num}_id` as keyof Participant] as string
-                                        const eventName = getEventName(eventId)
-                                        const isAttended = p[`event${num}_attendance` as keyof Participant] as boolean
+                                    {events.map((event) => {
+                                        const registration = p.events?.find(e => e.event_id === event.id)
+                                        const isAttended = registration?.attendance_status || false
+                                        // If registration exists, we show status.
+                                        // If NOT registered, we show 'Not Registered' or allow Add? 
+                                        // For now, let's allow marking present implies "Walk-in" registration for that event.
 
                                         return (
-                                            <TableCell key={num} className="p-2">
-                                                {eventId ? (
-                                                    <div className="space-y-1">
-                                                        <p className="text-[10px] text-gray-500 truncate max-w-[140px]" title={eventName}>{eventName}</p>
-                                                        <StatusBadge
-                                                            label={`Event ${num}`}
-                                                            active={isAttended}
-                                                            loading={processingId === p.id + `event${num}`}
-                                                            onClick={() => toggleEventAttendance(p, num as 1 | 2 | 3)}
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center opacity-20">
-                                                        <span className="text-xs text-gray-500">-</span>
-                                                    </div>
+                                            <TableCell key={event.id} className="p-2">
+                                                <StatusBadge
+                                                    label={event.event_code}
+                                                    active={isAttended}
+                                                    loading={processingId === p.id + event.id}
+                                                    onClick={() => toggleEventAttendance(p, event.id)}
+                                                />
+                                                {!registration && (
+                                                    <div className="text-[10px] text-center text-gray-600 mt-1">Not Reg.</div>
                                                 )}
                                             </TableCell>
                                         )

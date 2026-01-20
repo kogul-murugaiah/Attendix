@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
+import { useOrganization } from '@/context/organization-context'
 import {
     Table,
     TableBody,
@@ -19,6 +20,8 @@ import { Event } from '@/lib/types'
 import { Pencil, Trash2 } from 'lucide-react'
 
 export default function EventsManager() {
+    const { organization } = useOrganization()
+    const supabase = createClient()
     const [events, setEvents] = useState<Event[]>([])
     const [loading, setLoading] = useState(false)
     const [open, setOpen] = useState(false)
@@ -35,12 +38,15 @@ export default function EventsManager() {
     })
 
     useEffect(() => {
-        fetchEvents()
-    }, [])
+        if (organization) {
+            fetchEvents()
+        }
+    }, [organization])
 
     const fetchEvents = async () => {
+        if (!organization) return
         setLoading(true)
-        const { data, error } = await supabase.from('events').select('*').order('event_datetime')
+        const { data, error } = await supabase.from('events').select('*').eq('organization_id', organization.id).order('event_datetime')
         if (data) setEvents(data)
         setLoading(false)
     }
@@ -85,12 +91,17 @@ export default function EventsManager() {
 
         if (editingId) {
             // Update
-            const res = await supabase.from('events').update(payload).eq('id', editingId)
+            const res = await supabase.from('events').update(payload).eq('id', editingId).eq('organization_id', organization?.id)
             error = res.error
         } else {
             // Insert
-            const res = await supabase.from('events').insert(payload)
-            error = res.error
+            if (organization) {
+                const res = await supabase.from('events').insert({
+                    ...payload,
+                    organization_id: organization.id
+                })
+                error = res.error
+            }
         }
 
         if (error) {

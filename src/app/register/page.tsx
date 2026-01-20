@@ -1,45 +1,137 @@
-import RegistrationForm from "@/components/registration-form";
+'use client';
 
-export default function RegisterPage() {
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
+import Link from 'next/link';
+
+export default function SignUpPage() {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const router = useRouter();
+
+    useEffect(() => {
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                router.replace('/onboarding');
+            }
+        }
+        checkSession();
+    }, [router]);
+
+    const handleSignUp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+
+        try {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    emailRedirectTo: `${window.location.origin}/auth/callback`,
+                },
+            });
+
+            if (error) {
+                toast.error(error.message);
+                return;
+            }
+
+            if (data?.user) {
+                toast.success('Account created! Redirecting...');
+                // If auto-confirm is on (dev), we can login directly. 
+                // If not, they need to check email. 
+                // For dev environment usually auto-confirm is enabled or we can just redirect to login/onboarding.
+
+                // Try to sign in immediately to capture session
+                const { error: signInError } = await supabase.auth.signInWithPassword({
+                    email,
+                    password,
+                });
+
+                if (!signInError) {
+                    router.push('/onboarding');
+                } else {
+                    router.push('/login');
+                }
+            }
+        } catch (err: any) {
+            toast.error('An unexpected error occurred');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
-        <div className="min-h-screen relative overflow-hidden bg-[#0a0a0f] py-12 px-4 sm:px-6 lg:px-8 flex items-center justify-center font-sans selection:bg-purple-500/30 selection:text-white">
+        <div className="min-h-screen relative overflow-hidden bg-[#0a0a0f] flex items-center justify-center p-4 font-sans selection:bg-purple-500/30 selection:text-white">
             {/* Ambient Background Elements */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[120px] animate-pulse"></div>
-                <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-cyan-600/20 rounded-full blur-[120px] animate-pulse delay-1000"></div>
-                <div className="absolute top-[20%] right-[20%] w-[300px] h-[300px] bg-blue-600/10 rounded-full blur-[100px] animate-float"></div>
+                <div className="absolute top-[-20%] right-[-20%] w-[600px] h-[600px] bg-purple-600/20 rounded-full blur-[120px] animate-pulse"></div>
+                <div className="absolute bottom-[-20%] left-[-20%] w-[600px] h-[600px] bg-cyan-600/20 rounded-full blur-[120px] animate-pulse delay-1000"></div>
             </div>
 
             {/* Grid Overlay */}
             <div className="fixed inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_80%)] pointer-events-none"></div>
 
-            <div className="w-full max-w-4xl space-y-8 relative z-10">
-                <div className="text-center space-y-4">
-                    <div className="inline-flex items-center justify-center p-1 rounded-full bg-gradient-to-r from-purple-500/10 to-cyan-500/10 border border-white/5 backdrop-blur-sm mb-4">
-                        <span className="px-4 py-1 text-xs font-medium bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent uppercase tracking-widest">
-                            Official Registration
-                        </span>
+            <Card className="w-full max-w-md bg-[#13131a]/80 backdrop-blur-xl border border-white/10 shadow-2xl relative z-10 animate-in fade-in zoom-in-95 duration-500">
+                <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-purple-500 via-cyan-500 to-purple-500 opacity-50"></div>
+                <CardHeader className="space-y-1 text-center pb-8 pt-8">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-gradient-to-r from-purple-500 to-cyan-500 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/30">
+                        <span className="text-white font-bold text-xl">A</span>
                     </div>
-                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white drop-shadow-2xl">
-                        Symposium <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-cyan-400 to-purple-400 animate-gradient bg-300%">2024</span>
-                    </h1>
-                    <p className="max-w-2xl mx-auto text-xl text-gray-400 font-light">
-                        Secure your spot. Join the future of innovation.
-                    </p>
-                </div>
-
-                <div className="relative animate-in fade-in slide-in-from-bottom-8 duration-700">
-                    {/* Decorative glow behind the form */}
-                    <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-2xl blur opacity-20 animate-glow" />
-                    <div className="relative">
-                        <RegistrationForm />
-                    </div>
-                </div>
-
-                <p className="text-center text-sm text-gray-500 font-medium">
-                    &copy; 2024 Symposium Team. All rights reserved.
-                </p>
-            </div>
+                    <CardTitle className="text-2xl font-bold text-white">Create Account</CardTitle>
+                    <CardDescription className="text-gray-400">Join Attendix to manage your events.</CardDescription>
+                </CardHeader>
+                <form onSubmit={handleSignUp}>
+                    <CardContent className="space-y-4 px-8">
+                        <div className="space-y-2 group">
+                            <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-gray-400 group-focus-within:text-cyan-400 transition-colors">Email</Label>
+                            <Input
+                                id="email"
+                                type="email"
+                                placeholder="you@example.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                                className="h-11 bg-black/50 border-white/10 text-white focus:border-cyan-500/50 focus:ring-cyan-500/20 rounded-xl transition-all"
+                            />
+                        </div>
+                        <div className="space-y-2 group">
+                            <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-gray-400 group-focus-within:text-cyan-400 transition-colors">Password</Label>
+                            <Input
+                                id="password"
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                className="h-11 bg-black/50 border-white/10 text-white focus:border-cyan-500/50 focus:ring-cyan-500/20 rounded-xl transition-all"
+                            />
+                        </div>
+                    </CardContent>
+                    <CardFooter className="px-8 pb-8 pt-4 flex-col gap-4">
+                        <Button
+                            type="submit"
+                            className="w-full h-11 font-bold bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white shadow-lg shadow-purple-900/20 rounded-xl transition-all hover:scale-[1.02]"
+                            disabled={loading}
+                        >
+                            {loading ? 'Creating Account...' : 'Sign Up'}
+                        </Button>
+                        <div className="text-center text-sm text-gray-400">
+                            Already have an account?{' '}
+                            <Link href="/login" className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">
+                                Log in
+                            </Link>
+                        </div>
+                    </CardFooter>
+                </form>
+            </Card>
         </div>
     );
 }

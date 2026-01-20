@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
+import { useOrganization } from '@/context/organization-context'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import OverviewTab from "@/components/admin/overview"
@@ -11,36 +12,48 @@ import EventsManager from "@/components/admin/events-manager"
 import StaffManager from "@/components/admin/staff-manager"
 import AttendanceManager from "@/components/admin/attendance-manager"
 import ScanLogsTab from "@/components/admin/scan-logs"
+import RegistrationFormPage from "../registration-form/page"
 
 export default function AdminDashboard() {
     const router = useRouter()
+    const { organization, loading: orgLoading } = useOrganization()
+    const supabase = createClient()
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        checkAdmin()
-    }, [])
+        if (!orgLoading) {
+            checkAccess()
+        }
+    }, [orgLoading, organization])
 
-    const checkAdmin = async () => {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
+    const checkAccess = async () => {
+        if (!organization) {
+            setLoading(false)
+            return
+        }
+
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
             router.push('/login')
             return
         }
 
-        const { data: staff } = await supabase
-            .from('staff')
+        const { data: orgAdmin } = await supabase
+            .from('organization_admins')
             .select('role')
-            .eq('user_id', user.id)
+            .eq('user_id', session.user.id)
+            .eq('organization_id', organization.id)
             .single()
 
-        if (!staff || staff.role !== 'admin') {
-            router.push('/login') // or 403
+        if (!orgAdmin) {
+            router.push('/')
             return
         }
+
         setLoading(false)
     }
 
-    if (loading) return <div className="p-8">Loading Dashboard...</div>
+    if (loading || orgLoading) return <div className="p-8 flex items-center justify-center min-h-screen text-white">Loading Dashboard...</div>
 
     return (
         <div className="min-h-screen relative overflow-hidden bg-[#0a0a0f] text-white selection:bg-purple-500/30 selection:text-white font-sans">
@@ -61,11 +74,13 @@ export default function AdminDashboard() {
                                 <div className="relative">
                                     <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-500 to-cyan-500 blur-md opacity-50 group-hover:opacity-100 transition-opacity"></div>
                                     <div className="relative w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-cyan-500 flex items-center justify-center text-white font-bold text-lg shadow-inner border border-white/20">
-                                        A
+                                        {organization?.org_name?.charAt(0) || 'A'}
                                     </div>
                                 </div>
                                 <div>
-                                    <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Attendix</h1>
+                                    <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+                                        {organization?.org_name || 'Attendix'}
+                                    </h1>
                                     <p className="text-xs text-gray-500 font-medium tracking-wider">ADMIN CONSOLE</p>
                                 </div>
                             </div>
@@ -73,7 +88,7 @@ export default function AdminDashboard() {
                             {/* Navigation Tabs - Desktop */}
                             <div className="hidden md:block">
                                 <TabsList className="bg-white/5 border border-white/5 p-1.5 rounded-full backdrop-blur-lg flex gap-1">
-                                    {['overview', 'participants', 'events', 'attendance', 'staff', 'logs'].map((tab) => (
+                                    {['overview', 'participants', 'events', 'attendance', 'forms', 'staff', 'logs'].map((tab) => (
                                         <TabsTrigger
                                             key={tab}
                                             value={tab}
@@ -92,8 +107,8 @@ export default function AdminDashboard() {
                             <Button
                                 variant="ghost"
                                 className="rounded-xl border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 hover:border-white/20 hover:scale-105 transition-all duration-300"
-                                onClick={() => {
-                                    supabase.auth.signOut()
+                                onClick={async () => {
+                                    await supabase.auth.signOut()
                                     router.push('/login')
                                 }}
                             >
@@ -103,7 +118,7 @@ export default function AdminDashboard() {
                         {/* Mobile Tabs */}
                         <div className="md:hidden px-4 pb-4 overflow-x-auto scrollbar-hide">
                             <TabsList className="bg-white/5 border border-white/5 p-1 rounded-full backdrop-blur-lg inline-flex w-full min-w-max">
-                                {['overview', 'participants', 'events', 'attendance', 'staff', 'logs'].map((tab) => (
+                                {['overview', 'participants', 'events', 'attendance', 'forms', 'staff', 'logs'].map((tab) => (
                                     <TabsTrigger
                                         key={tab}
                                         value={tab}
@@ -130,6 +145,10 @@ export default function AdminDashboard() {
                         </TabsContent>
                         <TabsContent value="attendance" className="mt-0 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-125">
                             <AttendanceManager />
+                        </TabsContent>
+                        <TabsContent value="forms" className="mt-0 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
+                            {/* Render the full page component inside the tab, simplified */}
+                            <RegistrationFormPage />
                         </TabsContent>
                         <TabsContent value="staff" className="mt-0 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
                             <StaffManager />

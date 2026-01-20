@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
+import { useOrganization } from '@/context/organization-context'
 import {
     Table,
     TableBody,
@@ -20,6 +21,8 @@ import { Staff, Event } from '@/lib/types'
 import { Pencil, Trash2 } from 'lucide-react'
 
 export default function StaffManager() {
+    const { organization } = useOrganization()
+    const supabase = createClient()
     const [staffList, setStaffList] = useState<Staff[]>([])
     const [events, setEvents] = useState<Event[]>([])
     const [open, setOpen] = useState(false)
@@ -35,17 +38,21 @@ export default function StaffManager() {
     })
 
     useEffect(() => {
-        fetchStaff()
-        fetchEvents()
-    }, [])
+        if (organization) {
+            fetchStaff()
+            fetchEvents()
+        }
+    }, [organization])
 
     const fetchStaff = async () => {
-        const { data } = await supabase.from('staff').select('*, events(event_name)')
+        if (!organization) return
+        const { data } = await supabase.from('staff').select('*, events(event_name)').eq('organization_id', organization.id)
         if (data) setStaffList(data as any)
     }
 
     const fetchEvents = async () => {
-        const { data } = await supabase.from('events').select('id, event_name')
+        if (!organization) return
+        const { data } = await supabase.from('events').select('id, event_name').eq('organization_id', organization.id)
         if (data) setEvents(data as any)
     }
 
@@ -85,7 +92,7 @@ export default function StaffManager() {
                 // Create
                 const res = await fetch('/api/admin/create-staff', {
                     method: 'POST',
-                    body: JSON.stringify(formData),
+                    body: JSON.stringify({ ...formData, organization_id: organization?.id }),
                     headers: { 'Content-Type': 'application/json' }
                 })
                 const result = await res.json()

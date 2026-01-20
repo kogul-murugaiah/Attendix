@@ -1,11 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
+import { useOrganization } from '@/context/organization-context'
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 export default function OverviewTab() {
+    const { organization } = useOrganization()
+    const supabase = createClient()
     const [stats, setStats] = useState({
         totalParticipants: 0,
         gateEntries: 0,
@@ -14,14 +17,18 @@ export default function OverviewTab() {
     const [eventData, setEventData] = useState<any[]>([])
 
     useEffect(() => {
-        fetchStats()
-    }, [])
+        if (organization) {
+            fetchStats()
+        }
+    }, [organization])
 
     const fetchStats = async () => {
+        if (!organization) return
+
         // Parallel fetch
-        const p1 = supabase.from('participants').select('id', { count: 'exact', head: true })
-        const p2 = supabase.from('participants').select('id', { count: 'exact', head: true }).eq('gate_entry_status', true)
-        const p3 = supabase.from('events').select('*')
+        const p1 = supabase.from('participants').select('id', { count: 'exact', head: true }).eq('organization_id', organization.id)
+        const p2 = supabase.from('participants').select('id', { count: 'exact', head: true }).eq('gate_entry_status', true).eq('organization_id', organization.id)
+        const p3 = supabase.from('events').select('*').eq('organization_id', organization.id)
 
         const [r1, r2, r3] = await Promise.all([p1, p2, p3])
 
@@ -32,7 +39,7 @@ export default function OverviewTab() {
         })
 
         if (r3.data) {
-            setEventData(r3.data.map(e => ({
+            setEventData(r3.data.map((e: any) => ({
                 name: e.event_name,
                 attendance: e.current_attendance
             })))

@@ -70,6 +70,7 @@ export default function EventScannerPage() {
 
     // --- Real-time Subscription ---
     // --- Real-time Subscription ---
+    // --- Real-time Subscription ---
     useEffect(() => {
         if (!assignedEvent) return
 
@@ -78,28 +79,46 @@ export default function EventScannerPage() {
             .on(
                 'postgres_changes',
                 {
-                    event: 'UPDATE',
+                    event: '*',
                     schema: 'public',
-                    table: 'participants'
+                    table: 'event_registrations', // Listen to the normalized table now!
+                    filter: `event_id=eq.${assignedEvent.id}` // Only updates for this event
                 },
-                (payload) => {
-                    const updatedParticipant = payload.new as Participant
-                    // Update if the participant is in our list
-                    setParticipants((currentParticipants) => {
-                        const exists = currentParticipants.find(p => p.id === updatedParticipant.id)
-                        if (exists) {
-                            return currentParticipants.map(p =>
-                                p.id === updatedParticipant.id ? updatedParticipant : p
-                            )
-                        }
-                        return currentParticipants
-                    })
+                async (payload) => {
+                    // Since we need to update the participant list which contains joined data,
+                    // it is simplest to just refetch the participant list or that specific participant.
+                    // A full refetch ensures consistency with the join.
+                    fetchParticipants(assignedEvent.id, assignedEvent.organization_id)
                 }
             )
             .subscribe()
 
         return () => {
             supabase.removeChannel(channel)
+        }
+    }, [assignedEvent])
+
+    // --- GLOBAL BROADCAST LISTENER (Direct Line) ---
+    useEffect(() => {
+        if (!assignedEvent) return
+
+        const globalChannel = supabase
+            .channel('app-global')
+            .on(
+                'broadcast',
+                { event: 'new-registration' },
+                (payload) => {
+                    // Event Manager needs to know if the new student is relevant? 
+                    // Technically yes, they are searchable immediately.
+                    if (payload.payload.organization_id === assignedEvent.organization_id) {
+                        fetchParticipants(assignedEvent.id, assignedEvent.organization_id)
+                    }
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(globalChannel)
         }
     }, [assignedEvent])
 
@@ -125,21 +144,55 @@ export default function EventScannerPage() {
 
         const eventId = staff.assigned_event_id
         const { data: eventData } = await supabase.from('events').select('*').eq('id', eventId).single()
-        if (eventData) setAssignedEvent(eventData)
-
-        fetchParticipants(eventId)
+        if (eventData) {
+            setAssignedEvent(eventData)
+            // FIX: Pass organization_id directly to avoid race condition with state
+            fetchParticipants(eventId, eventData.organization_id)
+        }
     }
 
-    const fetchParticipants = async (eventId: string) => {
-        // Fetch all participants registered for this event
-        const { data: allParticipants } = await supabase
-            .from('participants')
-            .select('*')
-            .or(`event1_id.eq.${eventId},event2_id.eq.${eventId},event3_id.eq.${eventId}`)
+    const fetchParticipants = async (eventId: string, organizationId: string) => {
+        // Fetch all participants for the Organization and their event registrations
+        const { data: allData, error } = await supabase
+            .from('student_registrations')
+            .select('*, event_registrations(*)')
+            .eq('organization_id', organizationId)
 
-        if (allParticipants) {
-            setParticipants(allParticipants as Participant[])
-            // calculateStats called in useEffect now
+        if (error) {
+            console.error("Error fetching participants:", error)
+            return
+        }
+
+        if (allData) {
+            const mappedParticipants: Participant[] = allData.map((r: any) => ({
+                id: r.id,
+                name: r.full_name,
+                full_name: r.full_name,
+                email: r.email,
+                phone: r.phone,
+                participant_code: r.participant_code || r.qr_code,
+                organization_id: r.organization_id,
+                gate_entry_status: r.checked_in,
+                gate_entry_timestamp: r.checked_in_at,
+                // Map Joined Event Data
+                events: r.event_registrations.map((er: any) => ({
+                    event_id: er.event_id,
+                    attendance_status: er.attendance_status,
+                    scanned_at: er.scanned_at
+                })),
+                college: r.college,
+                created_at: r.created_at,
+                custom_data: r.custom_data,
+                status: r.status
+            }))
+
+            // Filter for THIS event
+            const relevantParticipants = mappedParticipants.filter(p =>
+                p.events?.some(e => e.event_id === eventId)
+            )
+
+            setParticipants(relevantParticipants)
+            setParticipantsLoaded(true)
         }
     }
 
@@ -153,9 +206,8 @@ export default function EventScannerPage() {
     const calculateStats = (participantList: Participant[], eventId: string) => {
         let attendedCount = 0
         participantList.forEach(p => {
-            if (p.event1_id === eventId && p.event1_attendance) attendedCount++
-            else if (p.event2_id === eventId && p.event2_attendance) attendedCount++
-            else if (p.event3_id === eventId && p.event3_attendance) attendedCount++
+            const registration = p.events?.find(e => e.event_id === eventId)
+            if (registration && registration.attendance_status) attendedCount++
         })
 
         setStats({
@@ -172,9 +224,9 @@ export default function EventScannerPage() {
         if (searchQuery) {
             const query = searchQuery.toLowerCase()
             filtered = filtered.filter(p =>
-                p.name.toLowerCase().includes(query) ||
-                p.participant_code.toLowerCase().includes(query) ||
-                p.college?.toLowerCase().includes(query)
+                (p.name || '').toLowerCase().includes(query) ||
+                (p.participant_code || '').toLowerCase().includes(query) ||
+                (p.college || '').toLowerCase().includes(query)
             )
         }
 
@@ -189,68 +241,41 @@ export default function EventScannerPage() {
     }
 
     const checkAttendanceStatus = (p: Participant, eventId: string) => {
-        if (p.event1_id === eventId) return p.event1_attendance
-        if (p.event2_id === eventId) return p.event2_attendance
-        if (p.event3_id === eventId) return p.event3_attendance
-        return false
+        const registration = p.events?.find(e => e.event_id === eventId)
+        return registration ? registration.attendance_status : false
     }
 
     const handleMarkAttendance = async (participantId: string) => {
         if (!assignedEvent) return
-        // Fetch fresh status to ensure we have the latest Gate Check-in info
-        const { data: freshParticipant, error: fetchError } = await supabase
-            .from('participants')
-            .select('*')
-            .eq('id', participantId)
-            .single()
-
-        if (fetchError || !freshParticipant) {
-            toast.error('Failed to verify participant status')
-            return
-        }
-
-        if (!freshParticipant.gate_entry_status) {
-            toast.error('Participant has not checked in at Reception yet.')
-            // Update local state to reflect reality if it was wrong
-            setParticipants(prev => prev.map(p => p.id === participantId ? { ...p, gate_entry_status: false } : p))
-            return
-        }
-
-        // Use the fresh participant data for the rest of the logic
-        const participant = freshParticipant as Participant
-
-
-        let attendanceField = ''
-        let timestampField = ''
-        if (participant.event1_id === assignedEvent.id) {
-            attendanceField = 'event1_attendance'
-            timestampField = 'event1_timestamp'
-        } else if (participant.event2_id === assignedEvent.id) {
-            attendanceField = 'event2_attendance'
-            timestampField = 'event2_timestamp'
-        } else {
-            attendanceField = 'event3_attendance'
-            timestampField = 'event3_timestamp'
-        }
 
         setProcessing(true)
         try {
+            // Get Staff ID for 'scanned_by'
+            const { data: { user } } = await supabase.auth.getUser()
+            let staffId = null
+            if (user) {
+                const { data: staff } = await supabase.from('staff').select('id').eq('user_id', user.id).single()
+                staffId = staff?.id
+            }
+
+            // Update the normalized table
             const { error } = await supabase
-                .from('participants')
+                .from('event_registrations')
                 .update({
-                    [attendanceField]: true,
-                    [timestampField]: new Date().toISOString()
+                    attendance_status: true,
+                    scanned_at: new Date().toISOString(),
+                    scanned_by: staffId
                 })
-                .eq('id', participantId)
+                .eq('participant_id', participantId)
+                .eq('event_id', assignedEvent.id)
 
             if (error) throw error
 
-            await supabase.rpc('increment_event_attendance', { event_id: assignedEvent.id })
-            await logScan(participantId, 'success', 'event_attendance') // Fixed scan_type
+            await logScan(participantId, 'success', 'event_attendance')
 
-            toast.success(`Marked Present: ${participant.name}`)
-            fetchParticipants(assignedEvent.id) // Refresh data
-            setScanResult({ status: 'success', message: 'Marked Present', participant })
+            toast.success(`Marked Present`) // Simplified msg locally
+            fetchParticipants(assignedEvent.id, assignedEvent.organization_id)
+            setScanResult({ status: 'success', message: 'Marked Present' })
         } catch (err) {
             console.error(err)
             toast.error('Failed to update attendance')
@@ -261,44 +286,33 @@ export default function EventScannerPage() {
 
     const handleMarkAbsent = async (participantId: string) => {
         if (!assignedEvent) return
-        const participant = participants.find(p => p.id === participantId)
-        if (!participant) return
-
-        // REMOVED CONFIRMATION DIALOG AS REQUESTED
-
-        let attendanceField = ''
-        let timestampField = ''
-        if (participant.event1_id === assignedEvent.id) {
-            attendanceField = 'event1_attendance'
-            timestampField = 'event1_timestamp'
-        } else if (participant.event2_id === assignedEvent.id) {
-            attendanceField = 'event2_attendance'
-            timestampField = 'event2_timestamp'
-        } else {
-            attendanceField = 'event3_attendance'
-            timestampField = 'event3_timestamp'
-        }
 
         setProcessing(true)
         try {
+            // Get Staff ID for 'scanned_by' or null
+            const { data: { user } } = await supabase.auth.getUser()
+            let staffId = null
+            if (user) {
+                const { data: staff } = await supabase.from('staff').select('id').eq('user_id', user.id).single()
+                staffId = staff?.id
+            }
+
             const { error } = await supabase
-                .from('participants')
+                .from('event_registrations')
                 .update({
-                    [attendanceField]: false,
-                    [timestampField]: null
+                    attendance_status: false,
+                    scanned_at: null,
+                    scanned_by: staffId // Log who undid it? Or null? Let's treat undo as an action too if we want.
                 })
-                .eq('id', participantId)
+                .eq('participant_id', participantId)
+                .eq('event_id', assignedEvent.id)
 
             if (error) throw error
 
-            // Note: We are not decrementing the events.current_attendance count in DB 
-            // because we lack a decrement RPC and direct update might be blocked.
-            // The dashboard stats are calculated locally so UI will be correct.
-
             await logScan(participantId, 'removed', 'manual_remove')
 
-            toast.success(`Marked Absent: ${participant.name}`)
-            fetchParticipants(assignedEvent.id) // Refresh data
+            toast.success(`Marked Absent`)
+            fetchParticipants(assignedEvent.id, assignedEvent.organization_id)
 
         } catch (err) {
             console.error(err)
@@ -315,9 +329,9 @@ export default function EventScannerPage() {
 
         try {
             const { data: userData, error } = await supabase
-                .from('participants')
+                .from('student_registrations')
                 .select('*')
-                .eq('participant_code', code)
+                .or(`participant_code.eq.${code},qr_code.eq.${code}`)
                 .single()
 
             if (error || !userData) {
@@ -325,36 +339,46 @@ export default function EventScannerPage() {
                 return
             }
 
-            const participant = userData as Participant
+            // Map locally for logic checks
+            const p: any = userData
+            const event1_id = p.event1_id
+            const event2_id = p.event2_id
+            const event3_id = p.event3_id
 
-            // Check Registration
             const isRegistered =
-                participant.event1_id === assignedEvent.id ||
-                participant.event2_id === assignedEvent.id ||
-                participant.event3_id === assignedEvent.id
+                event1_id === assignedEvent.id ||
+                event2_id === assignedEvent.id ||
+                event3_id === assignedEvent.id
 
             if (!isRegistered) {
-                setScanResult({ status: 'error', message: 'Not Registered for this Event', participant })
-                await logScan(participant.id, 'not_eligible')
+                setScanResult({ status: 'error', message: 'Not Registered for this Event', participant: { name: p.full_name, participant_code: p.participant_code } as any })
+                await logScan(p.id, 'not_eligible')
                 return
             }
 
             // Check Reception Entry
-            if (!participant.gate_entry_status) {
-                setScanResult({ status: 'error', message: 'Use Reception Gate First', participant })
-                await logScan(participant.id, 'entry_not_confirmed')
+            if (!p.checked_in) {
+                setScanResult({ status: 'error', message: 'Use Reception Gate First', participant: { name: p.full_name, participant_code: p.participant_code } as any })
+                await logScan(p.id, 'entry_not_confirmed')
                 return
             }
 
             // Check if already attended
-            if (checkAttendanceStatus(participant, assignedEvent.id)) {
-                setScanResult({ status: 'error', message: 'Already Marked Present', participant })
-                await logScan(participant.id, 'already_scanned')
+            // We need to pass a mapped object to checkAttendanceStatus, or duplicate logic
+            // Let's simplest logic here:
+            let alreadyAttended = false
+            if (event1_id === assignedEvent.id) alreadyAttended = p.event1_attendance
+            else if (event2_id === assignedEvent.id) alreadyAttended = p.event2_attendance
+            else if (event3_id === assignedEvent.id) alreadyAttended = p.event3_attendance
+
+            if (alreadyAttended) {
+                setScanResult({ status: 'error', message: 'Already Marked Present', participant: { name: p.full_name, participant_code: p.participant_code } as any })
+                await logScan(p.id, 'already_scanned')
                 return
             }
 
             // Mark Attendance
-            await handleMarkAttendance(participant.id)
+            await handleMarkAttendance(p.id)
 
         } catch (err) {
             setScanResult({ status: 'error', message: 'Unexpected Error' })
@@ -369,6 +393,7 @@ export default function EventScannerPage() {
         const { data: staff } = await supabase.from('staff').select('id').eq('user_id', user.id).single()
         if (staff) {
             const { error } = await supabase.from('scan_logs').insert({
+                organization_id: assignedEvent.organization_id,
                 participant_id: participantId,
                 scanned_by: staff.id,
                 scan_type: type,

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
+import { useOrganization } from '@/context/organization-context'
 import {
     Table,
     TableBody,
@@ -24,11 +25,20 @@ type LogWithDetails = {
 }
 
 export default function ScanLogsTab() {
+    const { organization } = useOrganization()
+    const supabase = createClient()
     const [logs, setLogs] = useState<any[]>([])
 
     useEffect(() => {
+        if (!organization) return
+
         const channel = supabase.channel('logs_realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'scan_logs' }, (payload) => {
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'scan_logs',
+                filter: `organization_id=eq.${organization.id}`
+            }, (payload) => {
                 fetchLogs() // Refresh on new log
             })
             .subscribe()
@@ -38,23 +48,25 @@ export default function ScanLogsTab() {
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [])
+    }, [organization])
 
     const fetchLogs = async () => {
+        if (!organization) return
         const { data, error } = await supabase
             .from('scan_logs')
             .select(`
                 *,
-                participants (name, participant_code),
+                student_registrations (full_name, qr_code),
                 staff (name)
             `)
+            .eq('organization_id', organization.id)
             .order('scan_timestamp', { ascending: false })
             .limit(50)
 
         if (!error && data) {
             setLogs(data)
         } else if (error) {
-            console.error("Error fetching logs:", error)
+            console.error("Error fetching logs details:", JSON.stringify(error, null, 2))
         }
     }
 
@@ -65,15 +77,15 @@ export default function ScanLogsTab() {
     }
 
     const getParticipantName = (log: any) => {
-        if (!log.participants) return 'Unknown'
-        if (Array.isArray(log.participants)) return log.participants[0]?.name || 'Unknown'
-        return log.participants.name || 'Unknown'
+        if (!log.student_registrations) return 'Unknown'
+        if (Array.isArray(log.student_registrations)) return log.student_registrations[0]?.full_name || 'Unknown'
+        return log.student_registrations.full_name || 'Unknown'
     }
 
     const getParticipantCode = (log: any) => {
-        if (!log.participants) return ''
-        if (Array.isArray(log.participants)) return log.participants[0]?.participant_code || ''
-        return log.participants.participant_code || ''
+        if (!log.student_registrations) return ''
+        if (Array.isArray(log.student_registrations)) return log.student_registrations[0]?.qr_code || ''
+        return log.student_registrations.qr_code || ''
     }
 
     return (

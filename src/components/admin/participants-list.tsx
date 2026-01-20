@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
+import { useOrganization } from '@/context/organization-context'
 import {
     Table,
     TableBody,
@@ -18,8 +19,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { Pencil } from 'lucide-react'
+import { Badge } from "@/components/ui/badge"
 
 export default function ParticipantsTab() {
+    const { organization } = useOrganization()
+    // stable instance to prevent subscription drops
+    const [supabase] = useState(() => createClient())
+
+    // --- State Definitions (Restored) ---
     const [participants, setParticipants] = useState<Participant[]>([])
     const [events, setEvents] = useState<{ id: string, event_name: string }[]>([])
     const [search, setSearch] = useState('')
@@ -40,46 +47,104 @@ export default function ParticipantsTab() {
     })
 
     useEffect(() => {
+        if (!organization?.id) return
+
         fetchParticipants()
         fetchEvents()
-    }, [])
+
+        // 1. Listen for Database Changes (Backup & Check-ins)
+        const channel = supabase
+            .channel('admin-participants-list-changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'student_registrations',
+                    filter: `organization_id=eq.${organization.id}`
+                },
+                () => {
+                    fetchParticipants()
+                }
+            )
+            .subscribe()
+
+        // 2. Listen for Global Broadcasts (Instant New Student)
+        const globalChannel = supabase
+            .channel('app-global')
+            .on(
+                'broadcast',
+                { event: 'new-registration' },
+                (payload) => {
+                    if (payload.payload.organization_id === organization.id) {
+                        fetchParticipants()
+                    }
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+            supabase.removeChannel(globalChannel)
+        }
+    }, [organization?.id])
 
     const fetchEvents = async () => {
-        const { data } = await supabase.from('events').select('id, event_name')
+        if (!organization) return
+        const { data } = await supabase.from('events').select('id, event_name').eq('organization_id', organization.id)
         if (data) setEvents(data)
     }
 
     const fetchParticipants = async () => {
-        setLoading(true)
-        let query = supabase.from('participants').select('*').order('created_at', { ascending: false })
+        if (!organization) return
 
-        if (search) {
-            query = query.ilike('name', `%${search}%`)
+        try {
+            setLoading(true)
+            // Fetch from new student_registrations table
+            const { data, error } = await supabase
+                .from('student_registrations')
+                .select('*')
+                .eq('organization_id', organization.id)
+                .order('created_at', { ascending: false })
+
+            if (error) {
+                console.error('Error fetching participants:', error)
+                toast.error('Failed to load participants')
+            } else {
+                setParticipants(data || [])
+            }
+        } catch (error) {
+            console.error('Error:', error)
+        } finally {
+            setLoading(false)
         }
-
-        // Limit to 50 for performance in this demo
-        query = query.limit(50)
-
-        const { data, error } = await query
-        if (!error && data) {
-            setParticipants(data as Participant[])
-        }
-        setLoading(false)
     }
-
     const handleEditClick = (participant: Participant) => {
         setEditingParticipant(participant)
+        const customData = participant.custom_data || {}
+
+        // Debugging: Console log to see what keys are actually in customData
+        console.log('Custom Data for Edit:', customData);
+
+        // Map Keys based on what RegistrationPage saves
+        // RegistrationPage likely saves field names: 'event_preference_1', 'event_preference_2' ...
+        // OR the field label "Event Preference 1"?
+        // The default form (backfill) uses 'field_name': 'event_preference_1'
+
         setEditFormData({
-            name: participant.name,
+            name: participant.full_name || participant.name || '',
             email: participant.email,
             phone: participant.phone || '',
-            college: participant.college,
-            department: participant.department || '',
-            year_of_study: participant.year_of_study || '',
-            event1_id: participant.event1_id || null,
-            event2_id: participant.event2_id || null,
-            event3_id: participant.event3_id || null,
-            participant_code: participant.participant_code
+            college: customData.college_name || customData.college || participant.college || '',
+            department: customData.department || participant.department || '',
+            year_of_study: customData.year_of_study || participant.year_of_study || '',
+
+            // Try to find event IDs from likely field names - USER CONFIRMED KEYS ARE event_1, event_2, event_3
+            event1_id: customData.event_1 || customData.event_preference_1 || customData.event1_id || participant.event1_id || null,
+            event2_id: customData.event_2 || customData.event_preference_2 || customData.event2_id || participant.event2_id || null,
+            event3_id: customData.event_3 || customData.event_preference_3 || customData.event3_id || participant.event3_id || null,
+
+            participant_code: participant.participant_code || participant.qr_code || ''
         })
         setEditOpen(true)
     }
@@ -88,18 +153,33 @@ export default function ParticipantsTab() {
         e.preventDefault()
         if (!editingParticipant) return
 
+        // Prepare custom_data update
+        const currentCustomData = editingParticipant.custom_data || {};
+        const updatedCustomData = {
+            ...currentCustomData,
+            college_name: editFormData.college,
+            department: editFormData.department,
+            year_of_study: editFormData.year_of_study,
+            // Save back using standard keys consistent with registration
+            event_1: editFormData.event1_id,
+            event_2: editFormData.event2_id,
+            event_3: editFormData.event3_id,
+            // Keep legacy/alternate keys in sync just in case
+            event_preference_1: editFormData.event1_id,
+            event_preference_2: editFormData.event2_id,
+            event_preference_3: editFormData.event3_id
+        };
+
         const { error } = await supabase
-            .from('participants')
+            .from('student_registrations')
             .update({
-                name: editFormData.name,
+                full_name: editFormData.name,
                 email: editFormData.email,
                 phone: editFormData.phone,
-                college: editFormData.college,
-                department: editFormData.department,
-                year_of_study: editFormData.year_of_study,
-                event1_id: editFormData.event1_id || null,
-                event2_id: editFormData.event2_id || null,
-                event3_id: editFormData.event3_id || null
+                // Update custom_data with merged fields
+                custom_data: updatedCustomData,
+                // Also update the primary event_id if event1 is set
+                event_id: editFormData.event1_id || null
             })
             .eq('id', editingParticipant.id)
 
@@ -116,6 +196,11 @@ export default function ParticipantsTab() {
         if (!id) return null
         return events.find(e => e.id === id)?.event_name || 'Unknown Event'
     }
+
+    const filteredParticipants = participants.filter(p =>
+        (p.full_name || p.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (p.participant_code || p.qr_code || '').toLowerCase().includes(search.toLowerCase())
+    )
 
     return (
         <div className="space-y-6">
@@ -172,42 +257,47 @@ export default function ParticipantsTab() {
                                 <TableHead className="text-gray-400 font-medium">College / Dept</TableHead>
                                 <TableHead className="text-gray-400 font-medium">Phone</TableHead>
                                 <TableHead className="text-gray-400 font-medium">Events</TableHead>
+                                <TableHead className="text-gray-400 font-medium">Status</TableHead>
                                 <TableHead className="text-gray-400 font-medium text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {participants.length === 0 && !loading && (
                                 <TableRow className="border-white/5">
-                                    <TableCell colSpan={6} className="text-center text-gray-500 py-8">No participants found</TableCell>
+                                    <TableCell colSpan={7} className="text-center text-gray-500 py-8">No participants found</TableCell>
                                 </TableRow>
                             )}
-                            {participants.map((p) => (
-                                <TableRow key={p.id} className="border-white/5 hover:bg-white/5 transition-colors group">
-                                    <TableCell className="font-mono text-xs text-purple-400 group-hover:text-purple-300 transition-colors">{p.participant_code}</TableCell>
+                            {filteredParticipants.map((participant) => (
+                                <TableRow key={participant.id} className="border-white/5 hover:bg-white/5 transition-colors group">
+                                    <TableCell className="font-mono text-xs text-purple-400 group-hover:text-purple-300 transition-colors">{participant.qr_code || participant.participant_code || '-'}</TableCell>
                                     <TableCell className="font-medium text-white">
                                         <div className="flex flex-col">
-                                            <span>{p.name}</span>
-                                            <span className="text-xs text-gray-500">{p.email}</span>
+                                            <span>{participant.full_name || participant.name}</span>
+                                            <span className="text-xs text-gray-500">{participant.email}</span>
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-gray-400">
                                         <div className="flex flex-col text-xs">
-                                            <span>{p.college}</span>
-                                            <span className="text-gray-600">{p.department} • {p.year_of_study}</span>
+                                            <span>{participant.custom_data?.college_name || participant.college || '-'}</span>
+                                            <span className="text-gray-600">{participant.custom_data?.department || participant.department || '-'} • {participant.year_of_study || '-'}</span>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="text-gray-400 text-xs font-mono">{p.phone}</TableCell>
-                                    <TableCell>
+                                    <TableCell className="text-gray-400 text-xs font-mono">{participant.phone || '-'}</TableCell>
+                                    <TableCell className="text-gray-400 text-xs">
                                         <div className="flex flex-col gap-1">
-                                            {[p.event1_id, p.event2_id, p.event3_id].filter(Boolean).map((eid, i) => (
-                                                <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 border border-white/5 text-gray-300 w-fit">
-                                                    {getEventName(eid)}
-                                                </span>
-                                            ))}
+                                            {participant.custom_data?.event_1 && <span>• {getEventName(participant.custom_data.event_1)}</span>}
+                                            {participant.custom_data?.event_2 && <span>• {getEventName(participant.custom_data.event_2)}</span>}
+                                            {participant.custom_data?.event_3 && <span>• {getEventName(participant.custom_data.event_3)}</span>}
+                                            {!participant.custom_data?.event_1 && !participant.custom_data?.event_2 && !participant.custom_data?.event_3 && <span className="text-gray-600">-</span>}
                                         </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant={participant.status === 'approved' ? 'default' : 'secondary'}>
+                                            {participant.status || 'Pending'}
+                                        </Badge>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => handleEditClick(p)} className="text-gray-400 hover:text-white hover:bg-white/10 rounded-lg">
+                                        <Button variant="ghost" size="icon" onClick={() => handleEditClick(participant)} className="text-gray-400 hover:text-white hover:bg-white/10 rounded-lg">
                                             <Pencil className="h-4 w-4" />
                                         </Button>
                                     </TableCell>

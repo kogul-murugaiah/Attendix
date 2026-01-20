@@ -35,6 +35,7 @@ export default function ReceptionDashboard() {
     const router = useRouter()
 
     // --- State ---
+    const [organizationId, setOrganizationId] = useState<string | null>(null)
     const [stats, setStats] = useState({
         registered: 0,
         entered: 0,
@@ -53,8 +54,7 @@ export default function ReceptionDashboard() {
 
     // --- Effects ---
     useEffect(() => {
-        checkAuth()
-        fetchData()
+        checkAuthAndFetch()
     }, [])
 
     useEffect(() => {
@@ -63,64 +63,120 @@ export default function ReceptionDashboard() {
 
     // --- Real-time Subscription ---
     useEffect(() => {
+        if (!organizationId) return
+
         const channel = supabase
             .channel('reception-participants-changes')
             .on(
                 'postgres_changes',
                 {
-                    event: 'UPDATE',
+                    event: '*',
                     schema: 'public',
-                    table: 'participants'
+                    table: 'student_registrations',
+                    filter: `organization_id=eq.${organizationId}`
                 },
                 (payload) => {
-                    const updatedParticipant = payload.new as Participant
-                    // Update if the participant is in our list
-                    setParticipants((currentParticipants) => {
-                        const exists = currentParticipants.find(p => p.id === updatedParticipant.id)
-                        if (exists) {
-                            return currentParticipants.map(p =>
-                                p.id === updatedParticipant.id ? updatedParticipant : p
-                            )
-                        }
-                        return currentParticipants
-                    })
+                    // Start simple: For any change, we re-fetch to ensure list is perfectly in sync
+                    // This handles New Registrations, Check-ins, Removals, everything.
+                    if (organizationId) fetchData(organizationId)
                 }
+
             )
             .subscribe()
 
         return () => {
             supabase.removeChannel(channel)
+            supabase.removeChannel(globalChannel)
         }
-    }, [])
+    }, [organizationId])
+
+    // Separate effect for Global Broadcast (Direct Line)
+    useEffect(() => {
+        if (!organizationId) return
+
+        const globalChannel = supabase
+            .channel('app-global')
+            .on(
+                'broadcast',
+                { event: 'new-registration' },
+                (payload) => {
+                    if (payload.payload.organization_id === organizationId) {
+                        fetchData(organizationId)
+                    }
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(globalChannel)
+        }
+    }, [organizationId])
 
     // --- Data Loading ---
-    const checkAuth = async () => {
+    const checkAuthAndFetch = async () => {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
             router.push('/login')
+            return
+        }
+
+        // Get Organization ID from Staff or Org Admin
+        // Get Organization ID from Staff or Org Admin
+        // Try Staff first
+        const { data: staff } = await supabase.from('staff').select('organization_id').eq('user_id', user.id).maybeSingle()
+        let orgId = staff?.organization_id
+
+        if (!orgId) {
+            // Try Organization Admin
+            const { data: admin } = await supabase.from('organization_admins').select('organization_id').eq('user_id', user.id).maybeSingle()
+            orgId = admin?.organization_id
+        }
+
+        if (orgId) {
+            setOrganizationId(orgId)
+            fetchData(orgId)
+        } else {
+            toast.error("No linked organization found for this user.")
         }
     }
 
-    const fetchData = async () => {
-        const { data: allParticipants, error } = await supabase
-            .from('participants')
+    const fetchData = async (orgId: string) => {
+        const { data: allData, error } = await supabase
+            .from('student_registrations')
             .select('*')
-            .order('name')
+            .eq('organization_id', orgId)
+            .order('full_name')
 
         if (error) {
+            console.error("Fetch Error:", error)
             toast.error('Failed to fetch participants')
             return
         }
 
-        if (allParticipants) {
-            setParticipants(allParticipants as Participant[])
-            // calculateStats called in useEffect now
+        if (allData) {
+            const mapped: Participant[] = allData.map((r: any) => ({
+                id: r.id,
+                name: r.full_name,
+                full_name: r.full_name,
+                email: r.email,
+                phone: r.phone,
+                participant_code: r.participant_code || r.qr_code,
+                register_number: r.register_number,
+                organization_id: r.organization_id,
+                gate_entry_status: r.checked_in,
+                gate_entry_timestamp: r.checked_in_at,
+                college: r.college,
+                department: r.department,
+                year_of_study: r.year_of_study,
+                custom_data: r.custom_data
+            }))
+            setParticipants(mapped)
         }
     }
 
     // Recalculate stats whenever participants list changes
     useEffect(() => {
-        if (participants.length > 0) {
+        if (participants) {
             calculateStats(participants)
         }
     }, [participants])
@@ -137,12 +193,13 @@ export default function ReceptionDashboard() {
     // --- Actions ---
     const filterParticipants = () => {
         let filtered = participants
+        if (!filtered) return
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase()
             filtered = filtered.filter(p =>
-                p.name.toLowerCase().includes(query) ||
-                p.participant_code.toLowerCase().includes(query) ||
+                p.name?.toLowerCase().includes(query) ||
+                p.participant_code?.toLowerCase().includes(query) ||
                 p.college?.toLowerCase().includes(query) ||
                 p.phone?.includes(query)
             )
@@ -158,16 +215,22 @@ export default function ReceptionDashboard() {
     }
 
     const handleCheckIn = async (participantId: string) => {
+        console.log("Reception: Attempting Check-in for", participantId)
         const participant = participants.find(p => p.id === participantId)
-        if (!participant) return
+        if (!participant) {
+            console.error("Reception: Participant not found in local state")
+            return
+        }
 
         if (participant.gate_entry_status) {
+            console.log("Reception: Already checked in")
             toast.error('Already Checked In')
             return
         }
 
         setProcessing(true)
         try {
+            console.log("Reception: Optimistic update...")
             // Optimistic Update
             setParticipants(prev => prev.map(p =>
                 p.id === participantId
@@ -175,55 +238,49 @@ export default function ReceptionDashboard() {
                     : p
             ))
 
-            const { data, error } = await supabase
-                .from('participants')
+            console.log("Reception: Sending DB update...")
+            const { error } = await supabase
+                .from('student_registrations')
                 .update({
-                    gate_entry_status: true,
-                    gate_entry_timestamp: new Date().toISOString()
+                    checked_in: true,
+                    checked_in_at: new Date().toISOString()
                 })
                 .eq('id', participantId)
-                .select()
 
             if (error) {
+                console.error("Reception: DB Update Error", error)
                 // Revert on error
-                fetchData()
+                if (organizationId) fetchData(organizationId)
                 throw error
             }
 
-            if (!data || data.length === 0) {
-                fetchData()
-                throw new Error("Update ignored. Database permission missing.")
-            }
+            console.log("Reception: DB Update Success")
 
             await logScan(participantId, 'gate_entry', 'success')
-
             toast.success(`Checked In: ${participant.name}`)
-
-            // Background refresh to ensure consistency
-            fetchData()
 
         } catch (err: any) {
             console.error("CheckIn Error:", err)
             toast.error(`Failed: ${err.message || 'Update failed'}`)
-
-            // Revert optimistic update on critical failure if fetchData didn't run
-            fetchData()
+            if (organizationId) fetchData(organizationId)
         } finally {
             setProcessing(false)
         }
     }
 
     const handleScan = async (code: string) => {
-        if (processing) return
+        if (processing || !organizationId) return
         setProcessing(true)
         setScanResult(null)
 
         try {
-            // 1. Find Participant
+            // 1. Find Participant by QR Code (checked against qr_code column now)
+            // Note: student_registrations uses 'qr_code' column for the unique code usually
             const { data: userData, error } = await supabase
-                .from('participants')
+                .from('student_registrations')
                 .select('*')
-                .eq('participant_code', code)
+                .eq('qr_code', code)
+                .eq('organization_id', organizationId)
                 .single()
 
             if (error || !userData) {
@@ -231,7 +288,14 @@ export default function ReceptionDashboard() {
                 return
             }
 
-            const participant = userData as Participant
+            // Map manually since we didn't use the common mapper
+            const participant: Participant = {
+                id: userData.id,
+                name: userData.full_name,
+                participant_code: userData.qr_code,
+                gate_entry_status: userData.checked_in,
+                organization_id: userData.organization_id
+            }
 
             // 2. Check Status
             if (participant.gate_entry_status) {
@@ -242,16 +306,16 @@ export default function ReceptionDashboard() {
 
             // 3. Check In
             await supabase
-                .from('participants')
+                .from('student_registrations')
                 .update({
-                    gate_entry_status: true,
-                    gate_entry_timestamp: new Date().toISOString()
+                    checked_in: true,
+                    checked_in_at: new Date().toISOString()
                 })
                 .eq('id', participant.id)
 
             await logScan(participant.id, 'gate_entry', 'success')
 
-            fetchData()
+            if (organizationId) fetchData(organizationId)
             setScanResult({ status: 'success', message: 'Access Granted', participant })
 
         } catch (err) {
@@ -263,18 +327,19 @@ export default function ReceptionDashboard() {
 
     const logScan = async (participantId: string, type: string, status: string) => {
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
+        if (!user || !organizationId) return
 
         const { data: staff } = await supabase.from('staff').select('id, assigned_event_id').eq('user_id', user.id).single()
-        if (staff) {
-            await supabase.from('scan_logs').insert({
-                participant_id: participantId,
-                scanned_by: staff.id,
-                scan_type: type,
-                status: status,
-                event_id: staff.assigned_event_id || null
-            })
-        }
+
+        // Log even if staff is missing (Admin override)
+        await supabase.from('scan_logs').insert({
+            organization_id: organizationId,
+            participant_id: participantId,
+            scanned_by: staff?.id || null,
+            scan_type: type,
+            status: status,
+            event_id: staff?.assigned_event_id || null
+        })
     }
 
     const handleUndoCheckIn = async (participantId: string) => {
@@ -282,8 +347,6 @@ export default function ReceptionDashboard() {
         if (!participant) return
 
         if (!participant.gate_entry_status) return
-
-        // REMOVED CONFIRMATION DIALOG AS REQUESTED
 
         setProcessing(true)
         try {
@@ -294,34 +357,26 @@ export default function ReceptionDashboard() {
                     : p
             ))
 
-            const { data, error } = await supabase
-                .from('participants')
+            const { error } = await supabase
+                .from('student_registrations')
                 .update({
-                    gate_entry_status: false,
-                    gate_entry_timestamp: null
+                    checked_in: false,
+                    checked_in_at: null
                 })
                 .eq('id', participantId)
-                .select()
 
             if (error) {
-                fetchData()
+                if (organizationId) fetchData(organizationId)
                 throw error
             }
 
-            if (!data || data.length === 0) {
-                fetchData()
-                throw new Error("Update ignored. Database permission missing.")
-            }
-
             await logScan(participantId, 'gate_entry', 'removed')
-
             toast.success(`Removed Check-In: ${participant.name}`)
-            fetchData()
 
         } catch (err: any) {
             console.error("Undo Error:", err)
             toast.error(`Failed: ${err.message || 'Undo failed'}`)
-            fetchData()
+            if (organizationId) fetchData(organizationId)
         } finally {
             setProcessing(false)
         }

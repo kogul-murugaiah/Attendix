@@ -10,7 +10,7 @@ Built with **Next.js 16**, **Supabase**, and **Tailwind CSS**.
 *   **Organization Isolation**: Support for multiple organizations (colleges/companies) within a single instance. Data is strictly isolated via Row Level Security (RLS).
 *   **Role-Based Access Control (RBAC)**:
     *   **Super Admin**: Manage platform-wide settings and organizations.
-    *   **Org Admin**: Full control over a specific organization's events, staff, and data.
+    *   **Org Admin**: Full control over a specific organization's events,staff, and data.
     *   **Staff**: specialized access for gatekeeping and event scanning.
 
 ### 📝 Smart Registration System

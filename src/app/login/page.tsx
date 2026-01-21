@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import Link from 'next/link'
+import Image from "next/image"
 
 export default function LoginPage() {
     const [email, setEmail] = useState('')
@@ -115,9 +116,17 @@ export default function LoginPage() {
 
             <Card className="w-full max-w-md bg-[#13131a]/80 backdrop-blur-xl border border-white/10 shadow-2xl relative z-10 animate-in fade-in zoom-in-95 duration-500">
                 <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-purple-500 via-cyan-500 to-purple-500 opacity-50"></div>
-                <CardHeader className="space-y-1 text-center pb-8 pt-8">
-                    <div className="mx-auto w-12 h-12 rounded-full bg-gradient-to-r from-purple-500 to-cyan-500 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/30">
-                        <span className="text-white font-bold text-xl">A</span>
+                <CardHeader className="space-y-1 text-center pb-2 pt-4">
+                    <div className="flex justify-center mb-2">
+                        <div className="relative w-32 h-32">
+                            <Image
+                                src="/logo.png"
+                                alt="Attendix"
+                                fill
+                                className="object-contain"
+                                priority
+                            />
+                        </div>
                     </div>
                     <CardTitle className="text-2xl font-bold text-white">Welcome Back</CardTitle>
                     <CardDescription className="text-gray-400">Enter your credentials to access the system.</CardDescription>
@@ -166,6 +175,6 @@ export default function LoginPage() {
                     </CardFooter>
                 </form>
             </Card>
-        </div>
+        </div >
     )
 }

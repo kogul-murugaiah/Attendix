@@ -277,6 +277,13 @@ export default function RegistrationPage() {
 
         // Dynamic Event Handling
         if (field.field_name.startsWith('event_')) {
+            // Get all other selected event IDs
+            const otherSelectedEventIds = Object.entries(formData)
+                .filter(([name, value]) => name.startsWith('event_') && name !== field.field_name && value && value !== 'none')
+                .map(([_, value]) => value);
+
+            const availableEvents = events.filter(e => !otherSelectedEventIds.includes(e.id));
+
             return (
                 <Select onValueChange={v => handleInputChange(field.field_name, v)} value={formData[field.field_name]}>
                     <SelectTrigger className="bg-gray-900 border-gray-600">
@@ -284,7 +291,7 @@ export default function RegistrationPage() {
                     </SelectTrigger>
                     <SelectContent className="bg-gray-900 border-gray-700 text-white">
                         <SelectItem value="none">-- None --</SelectItem>
-                        {events.map(e => (
+                        {availableEvents.map(e => (
                             <SelectItem key={e.id} value={e.id}>{e.event_name}</SelectItem>
                         ))}
                     </SelectContent>

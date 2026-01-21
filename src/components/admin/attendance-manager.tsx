@@ -148,17 +148,18 @@ export default function AttendanceManager() {
         // Get staff ID
         const { data: staff } = await supabase.from('staff').select('id').eq('user_id', user.id).single()
 
-        if (true) {
-            await supabase.from('scan_logs').insert({
-                organization_id: organization.id,
-                participant_id: participantId,
-                scanned_by: staff?.id || null, // Allow admin override without staff record
-                scan_type: 'admin_override',
-                status: status,
-                event_id: eventId || null,
-                scan_timestamp: new Date().toISOString()
-            })
-        }
+        const orgId = organization?.id
+        if (!orgId) return
+
+        await supabase.from('scan_logs').insert({
+            organization_id: orgId,
+            participant_id: participantId,
+            scanned_by: staff?.id || null, // Allow admin override without staff record
+            scan_type: 'admin_override',
+            status: status,
+            event_id: eventId || null,
+            scan_timestamp: new Date().toISOString()
+        })
     }
 
     const toggleReception = async (p: Participant) => {
@@ -188,6 +189,12 @@ export default function AttendanceManager() {
     }
 
     const toggleEventAttendance = async (p: Participant, eventId: string) => {
+        // Enforce Reception Check-in
+        if (!p.gate_entry_status) {
+            toast.error("Participant must check in at Reception first!")
+            return
+        }
+
         const registration = p.events?.find(e => e.event_id === eventId)
 
         const currentStatus = registration?.attendance_status || false
@@ -245,25 +252,27 @@ export default function AttendanceManager() {
         }
     }
 
-    const StatusBadge = ({ active, onClick, loading, label }: any) => (
+    const StatusBadge = ({ active, onClick, loading, label, disabled }: any) => (
         <button
             onClick={onClick}
-            disabled={loading}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-300 w-full justify-between group ${active
-                ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20'
-                : 'bg-white/5 border-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+            disabled={loading || disabled}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-300 w-full justify-between group ${disabled
+                ? 'bg-black/20 border-white/5 text-gray-600 cursor-not-allowed grayscale'
+                : active
+                    ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20'
+                    : 'bg-white/5 border-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
                 }`}
         >
-            <div className="flex flex-col items-start">
+            <div className="flex flex-col items-start text-left">
                 <span className="text-[10px] uppercase font-bold tracking-wider opacity-60">{label}</span>
-                <span className={`text-xs font-medium ${active ? 'text-green-400' : 'text-gray-400'}`}>
-                    {active ? 'Present' : 'Absent'}
+                <span className={`text-xs font-medium ${disabled ? 'text-gray-600' : active ? 'text-green-400' : 'text-gray-400'}`}>
+                    {disabled ? 'N/A' : active ? 'Present' : 'Absent'}
                 </span>
             </div>
             {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
             ) : (
-                <div className={`h-5 w-5 rounded-full flex items-center justify-center transition-colors ${active ? 'bg-green-500 text-black' : 'bg-gray-700 text-gray-400'}`}>
+                <div className={`h-5 w-5 rounded-full flex items-center justify-center transition-colors ${disabled ? 'bg-gray-800 text-gray-600' : active ? 'bg-green-500 text-black' : 'bg-gray-700 text-gray-400'}`}>
                     {active ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
                 </div>
             )}
@@ -332,9 +341,10 @@ export default function AttendanceManager() {
                                                     active={isAttended}
                                                     loading={processingId === p.id + event.id}
                                                     onClick={() => toggleEventAttendance(p, event.id)}
+                                                    disabled={!registration}
                                                 />
                                                 {!registration && (
-                                                    <div className="text-[10px] text-center text-gray-600 mt-1">Not Reg.</div>
+                                                    <div className="text-[10px] text-center text-gray-600 mt-1 font-medium italic">Not Registered</div>
                                                 )}
                                             </TableCell>
                                         )

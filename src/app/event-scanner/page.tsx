@@ -30,9 +30,11 @@ import {
     Calendar,
     Filter,
     Camera,
-    X
+    X,
+    Download
 } from 'lucide-react'
 import { Badge } from "@/components/ui/badge"
+import * as XLSX from 'xlsx'
 
 export default function EventScannerPage() {
     const router = useRouter()
@@ -247,6 +249,13 @@ export default function EventScannerPage() {
 
     const handleMarkAttendance = async (participantId: string) => {
         if (!assignedEvent) return
+
+        // 1. Enforce Reception Check-in
+        const participant = participants.find(p => p.id === participantId)
+        if (participant && !participant.gate_entry_status) {
+            toast.error("Participant must check in at Reception first!")
+            return
+        }
 
         setProcessing(true)
         try {
@@ -521,6 +530,32 @@ export default function EventScannerPage() {
                                 <FilterButton active={statusFilter === 'present'} onClick={() => setStatusFilter('present')} label="Present" />
                                 <FilterButton active={statusFilter === 'absent'} onClick={() => setStatusFilter('absent')} label="Absent" />
                             </div>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="border-white/10 bg-black/40 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl h-10 w-10"
+                                onClick={() => {
+                                    if (!assignedEvent) return
+                                    const data = filteredParticipants.map(p => {
+                                        const isPresent = checkAttendanceStatus(p, assignedEvent.id)
+                                        return {
+                                            'Code': p.participant_code || p.qr_code || '',
+                                            'Name': p.name || p.full_name || '',
+                                            'Email': p.email || '',
+                                            'College': p.college || '',
+                                            'Phone': p.phone || '',
+                                            'Status': isPresent ? 'Present' : 'Absent',
+                                            'Reception Check-in': p.gate_entry_status ? 'Yes' : 'No'
+                                        }
+                                    })
+                                    const ws = XLSX.utils.json_to_sheet(data)
+                                    const wb = XLSX.utils.book_new()
+                                    XLSX.utils.book_append_sheet(wb, ws, "Attendance")
+                                    XLSX.writeFile(wb, `${assignedEvent.event_name}_Attendance_${statusFilter}.xlsx`)
+                                }}
+                            >
+                                <Download className="w-4 h-4" />
+                            </Button>
                         </div>
                     </div>
 
@@ -529,6 +564,7 @@ export default function EventScannerPage() {
                             <TableHeader className="bg-white/5">
                                 <TableRow className="border-white/5 hover:bg-transparent">
                                     <TableHead className="text-gray-400">Participant</TableHead>
+                                    <TableHead className="text-gray-400">Email</TableHead>
                                     <TableHead className="text-gray-400">Code</TableHead>
                                     <TableHead className="text-gray-400">College</TableHead>
                                     <TableHead className="text-gray-400">Mobile</TableHead>
@@ -550,7 +586,9 @@ export default function EventScannerPage() {
                                             <TableRow key={p.id} className="border-white/5 hover:bg-white/[0.02] transition-colors">
                                                 <TableCell>
                                                     <div className="font-medium text-white">{p.name}</div>
-                                                    <div className="text-xs text-gray-500">{p.email}</div>
+                                                </TableCell>
+                                                <TableCell className="text-gray-400 text-sm">
+                                                    {p.email}
                                                 </TableCell>
                                                 <TableCell className="font-mono text-xs text-purple-300 bg-purple-500/10 px-2 py-1 rounded w-fit h-fit">
                                                     {p.participant_code}

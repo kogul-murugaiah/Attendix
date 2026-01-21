@@ -86,7 +86,6 @@ export default function ReceptionDashboard() {
 
         return () => {
             supabase.removeChannel(channel)
-            supabase.removeChannel(globalChannel)
         }
     }, [organizationId])
 
@@ -168,7 +167,8 @@ export default function ReceptionDashboard() {
                 college: r.college,
                 department: r.department,
                 year_of_study: r.year_of_study,
-                custom_data: r.custom_data
+                custom_data: r.custom_data,
+                events: [] // Default to empty array as reception view doesn't render event specific details yet
             }))
             setParticipants(mapped)
         }

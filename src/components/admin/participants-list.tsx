@@ -19,7 +19,7 @@ import { FormField } from '@/lib/types/registration'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Pencil, FileSpreadsheet } from 'lucide-react'
+import { Pencil, FileSpreadsheet, Mail } from 'lucide-react'
 import { Badge } from "@/components/ui/badge"
 import * as XLSX from 'xlsx'
 
@@ -36,6 +36,7 @@ export default function ParticipantsTab() {
     const [loading, setLoading] = useState(false)
     const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null)
     const [editOpen, setEditOpen] = useState(false)
+    const [sendingEmailId, setSendingEmailId] = useState<string | null>(null)
     const [editFormData, setEditFormData] = useState({
         name: '',
         email: '',
@@ -48,6 +49,49 @@ export default function ParticipantsTab() {
         event3_id: '' as string | null,
         participant_code: ''
     })
+
+    const handleSendTicket = async (participant: Participant) => {
+        if (!participant.email) {
+            toast.error('Participant has no email address')
+            return
+        }
+        if (!participant.participant_code && !participant.qr_code) {
+            toast.error('Participant has no generated code')
+            return
+        }
+
+        try {
+            setSendingEmailId(participant.id)
+            toast.info('Sending ticket to ' + participant.email + '...')
+
+            const response = await fetch('/api/send-ticket', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    participantId: participant.id,
+                    email: participant.email,
+                    name: participant.full_name || participant.name,
+                    participantCode: participant.participant_code || participant.qr_code,
+                    eventName: organization?.org_name || 'Event',
+                    organizationName: organization?.org_name,
+                    // Additional check-in details if needed
+                })
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to send email')
+            }
+
+            toast.success('Ticket sent successfully!')
+        } catch (error: any) {
+            console.error('Send ticket error:', error)
+            toast.error('Failed to send ticket: ' + error.message)
+        } finally {
+            setSendingEmailId(null)
+        }
+    }
 
     useEffect(() => {
         if (!organization?.id) return
@@ -394,9 +438,25 @@ export default function ParticipantsTab() {
                                         </TableCell>
                                     ))}
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => handleEditClick(participant)} className="text-gray-400 hover:text-white hover:bg-white/10 rounded-lg">
-                                            <Pencil className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex justify-end gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleSendTicket(participant)}
+                                                disabled={sendingEmailId === participant.id}
+                                                className="text-cyan-400 hover:text-white hover:bg-cyan-500/10 rounded-lg"
+                                                title="Send Ticket Email"
+                                            >
+                                                {sendingEmailId === participant.id ? (
+                                                    <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                ) : (
+                                                    <Mail className="h-4 w-4" />
+                                                )}
+                                            </Button>
+                                            <Button variant="ghost" size="icon" onClick={() => handleEditClick(participant)} className="text-gray-400 hover:text-white hover:bg-white/10 rounded-lg">
+                                                <Pencil className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))}

@@ -26,6 +26,7 @@ export default function EventsManager() {
     const [loading, setLoading] = useState(false)
     const [open, setOpen] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
     const [formData, setFormData] = useState({
         event_name: '',
         event_code: '',
@@ -94,8 +95,21 @@ export default function EventsManager() {
             const res = await supabase.from('events').update(payload).eq('id', editingId).eq('organization_id', organization?.id)
             error = res.error
         } else {
-            // Insert
+            // Insert - Check event limit first
             if (organization) {
+                // Count existing events
+                const { count } = await supabase
+                    .from('events')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('organization_id', organization.id)
+
+                const maxEvents = organization.max_events || 3 // Default to free plan limit
+
+                if (count !== null && count >= maxEvents) {
+                    toast.error(`Event limit reached! Your plan allows only ${maxEvents} events. Please upgrade your plan or contact support.`)
+                    return
+                }
+
                 const res = await supabase.from('events').insert({
                     ...payload,
                     organization_id: organization.id
@@ -114,14 +128,21 @@ export default function EventsManager() {
         }
     }
 
-    const handleDelete = async (id: string, name: string) => {
-        if (!confirm(`Are you sure you want to PERMANENTLY DELETE event "${name}"?\n\nThis might delete all associated participant records depending on database rules.`)) return
+    const handleDeleteClick = (id: string, name: string) => {
+        // Set delete target to trigger confirmation dialog
+        setDeleteTarget({ id, name })
+    }
+
+    const executeDelete = async () => {
+        if (!deleteTarget) return
 
         setLoading(true)
-        const { error } = await supabase.from('events').delete().eq('id', id)
+        const { error } = await supabase.from('events').delete().eq('id', deleteTarget.id)
         setLoading(false)
+        setDeleteTarget(null)
 
         if (error) {
+            console.error('Delete error:', error)
             toast.error('Failed to delete event: ' + error.message)
         } else {
             toast.success('Event deleted successfully')
@@ -239,7 +260,7 @@ export default function EventsManager() {
                                             <Button variant="ghost" size="icon" onClick={() => handleEditClick(e)} className="text-gray-400 hover:text-white hover:bg-white/10 rounded-lg">
                                                 <Pencil className="h-4 w-4" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id, e.event_name)} className="text-red-400/70 hover:text-red-400 hover:bg-red-500/10 rounded-lg">
+                                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(e.id, e.event_name)} className="text-red-400/70 hover:text-red-400 hover:bg-red-500/10 rounded-lg">
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </div>
@@ -250,6 +271,27 @@ export default function EventsManager() {
                     </Table>
                 </div>
             </div>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={!!deleteTarget} onOpenChange={(val) => !val && setDeleteTarget(null)}>
+                <DialogContent className="bg-[#13131a]/95 backdrop-blur-xl border border-white/10 text-white sm:max-w-[400px]">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold text-red-400">Confirm Delete</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <p className="text-gray-300">Are you sure you want to permanently delete event <span className="font-bold text-white">"{deleteTarget?.name}"</span>?</p>
+                        <p className="text-sm text-gray-500 mt-2">This might delete all associated participant records.</p>
+                    </div>
+                    <div className="flex gap-3 justify-end">
+                        <Button onClick={() => setDeleteTarget(null)} className="bg-white/5 hover:bg-white/10 text-white border border-white/10">
+                            Cancel
+                        </Button>
+                        <Button onClick={executeDelete} className="bg-red-600 hover:bg-red-700 text-white">
+                            Delete Event
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

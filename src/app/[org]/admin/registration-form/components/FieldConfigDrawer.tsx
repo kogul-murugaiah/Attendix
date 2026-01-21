@@ -55,7 +55,8 @@ export default function FieldConfigDrawer({
         is_required: false,
         placeholder: '',
         help_text: '',
-        field_options: []
+        field_options: [],
+        field_name: ''
     });
 
     const [optionsString, setOptionsString] = useState('');
@@ -158,7 +159,7 @@ export default function FieldConfigDrawer({
                     </div>
 
                     {/* Options (Conditional) */}
-                    {['select', 'radio', 'checkbox'].includes(formData.field_type as string) && (
+                    {['select', 'radio', 'checkbox'].includes(formData.field_type as string) && (!formData.field_name?.startsWith('event_') && !field?.field_name?.startsWith('event_')) && (
                         <div className="space-y-2 bg-white/5 p-4 rounded-md border border-white/10">
                             <Label htmlFor="options" className="text-gray-300">Options (Comma Separated)</Label>
                             <Textarea
@@ -169,6 +170,15 @@ export default function FieldConfigDrawer({
                                 className="bg-black/50 border-white/10 text-white focus:border-purple-500/50 min-h-[80px]"
                             />
                             <p className="text-xs text-gray-500">Enter options separated by commas.</p>
+                        </div>
+                    )}
+
+                    {/* Dynamic Event Options Message */}
+                    {(formData.field_name?.startsWith('event_') || field?.field_name?.startsWith('event_')) && (
+                        <div className="bg-purple-500/10 border border-purple-500/20 p-4 rounded-lg">
+                            <p className="text-sm text-purple-200">
+                                <strong>Dynamic Event Field:</strong> The options for this dropdown are automatically populated with your active events.
+                            </p>
                         </div>
                     )}
 
@@ -210,7 +220,7 @@ export default function FieldConfigDrawer({
                 </div>
 
                 <SheetFooter className="flex-none pt-4 border-t border-white/10 mt-auto">
-                    <Button variant="outline" onClick={() => onOpenChange(false)} className="border-white/10 text-gray-300 hover:bg-white/5 hover:text-white">
+                    <Button onClick={() => onOpenChange(false)} className="bg-white/5 hover:bg-white/10 text-white border border-white/10">
                         Cancel
                     </Button>
                     <Button onClick={handleSave} className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white hover:from-purple-500 hover:to-cyan-500">

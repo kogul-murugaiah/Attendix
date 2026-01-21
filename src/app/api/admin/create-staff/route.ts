@@ -22,11 +22,25 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Organization ID is required' }, { status: 400 })
         }
 
-        // Security Check: Ensure the requester (Org Admin) is actually part of this organization
-        // Since this is a service_role action (admin.createUser), we must safeguard it.
-        // Ideally we check the session cookie, but for now we trust the passing of org_id 
-        // IF proper middleware/RLS was in place for the API route itself.
-        // TODO: Improve API protection by validating session token here against organization_id
+        // Check staff limit before creating
+        const { data: org } = await supabaseAdmin
+            .from('organizations')
+            .select('max_staff')
+            .eq('id', organization_id)
+            .single()
+
+        const { count: staffCount } = await supabaseAdmin
+            .from('staff')
+            .select('*', { count: 'exact', head: true })
+            .eq('organization_id', organization_id)
+
+        const maxStaff = org?.max_staff || 5 // Default to free plan
+
+        if (staffCount !== null && staffCount >= maxStaff) {
+            return NextResponse.json({
+                error: `Staff limit reached! Your plan allows only ${maxStaff} staff members. Please upgrade your plan.`
+            }, { status: 400 })
+        }
 
         // 1. Create Auth User
         const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({

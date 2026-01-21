@@ -37,8 +37,6 @@ export default function LoginPage() {
                 return
             }
 
-            console.log('Auth User ID:', user.id)
-
             // 1. Check for Super Admin
             const { data: superAdmin } = await supabase
                 .from('super_admins')

@@ -55,8 +55,12 @@ export type Participant = {
     email: string
     phone?: string | null
     college?: string
+    college_name?: string | null
     department?: string
     year_of_study?: string
+    event1_id?: string | null
+    event2_id?: string | null
+    event3_id?: string | null
     custom_data?: Record<string, any>
     status?: 'pending' | 'approved' | 'rejected' | 'cancelled'
     qr_code_url?: string | null

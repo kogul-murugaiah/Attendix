@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Participant } from '@/lib/types'
+import { FormField } from '@/lib/types/registration'
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -29,6 +30,7 @@ export default function ParticipantsTab() {
     // --- State Definitions (Restored) ---
     const [participants, setParticipants] = useState<Participant[]>([])
     const [events, setEvents] = useState<{ id: string, event_name: string }[]>([])
+    const [customFields, setCustomFields] = useState<FormField[]>([])
     const [search, setSearch] = useState('')
     const [loading, setLoading] = useState(false)
     const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null)
@@ -51,6 +53,7 @@ export default function ParticipantsTab() {
 
         fetchParticipants()
         fetchEvents()
+        fetchFormFields()
 
         // 1. Listen for Database Changes (Backup & Check-ins)
         const channel = supabase
@@ -95,15 +98,42 @@ export default function ParticipantsTab() {
         if (data) setEvents(data)
     }
 
+    const fetchFormFields = async () => {
+        if (!organization) return
+        // Get the active form for this organization
+        const { data: formData } = await supabase
+            .from('registration_forms')
+            .select('id')
+            .eq('organization_id', organization.id)
+            .eq('is_active', true)
+            .single()
+
+        if (!formData) return
+
+        // Fetch non-core fields (custom fields only)
+        const { data: fieldsData } = await supabase
+            .from('form_fields')
+            .select('*')
+            .eq('form_id', formData.id)
+            .eq('is_core_field', false)
+            .order('display_order')
+
+        if (fieldsData) {
+            // Filter out 'event_' fields as they are shown in the specific 'Events' column
+            const displayFields = (fieldsData as FormField[]).filter(f => !f.field_name.startsWith('event_'))
+            setCustomFields(displayFields)
+        }
+    }
+
     const fetchParticipants = async () => {
         if (!organization) return
 
         try {
             setLoading(true)
-            // Fetch from new student_registrations table
+            // Fetch from student_registrations with event_registrations join
             const { data, error } = await supabase
                 .from('student_registrations')
-                .select('*')
+                .select('*, event_registrations(event_id, events(event_name))')
                 .eq('organization_id', organization.id)
                 .order('created_at', { ascending: false })
 
@@ -111,7 +141,16 @@ export default function ParticipantsTab() {
                 console.error('Error fetching participants:', error)
                 toast.error('Failed to load participants')
             } else {
-                setParticipants(data || [])
+                // Transform data to include event names
+                const transformed = (data || []).map((p: any) => ({
+                    ...p,
+                    events: p.event_registrations?.map((er: any) => ({
+                        event_id: er.event_id,
+                        event_name: er.events?.event_name || 'Unknown',
+                        attendance_status: er.attendance_status || false
+                    })) || []
+                }))
+                setParticipants(transformed)
             }
         } catch (error) {
             console.error('Error:', error)
@@ -219,22 +258,25 @@ export default function ParticipantsTab() {
                 </Button>
                 <Button variant="outline" className="border-white/10 bg-black/50 text-gray-300 hover:bg-white/10 hover:text-white rounded-xl backdrop-blur-md" onClick={() => {
                     // CSV Export Logic
-                    const headers = ['Code', 'Name', 'Email', 'Phone', 'College', 'Department', 'Year', 'Event 1', 'Event 2', 'Event 3']
+                    const baseHeaders = ['Code', 'Name', 'Email', 'Phone', 'College', 'Department', 'Year', 'Events']
+                    const customHeaders = customFields.map(f => f.field_label)
+                    const headers = [...baseHeaders, ...customHeaders]
                     const csvContent = "data:text/csv;charset=utf-8,"
                         + headers.join(",") + "\n"
                         + participants.map(p => {
-                            return [
-                                p.participant_code,
-                                `"${p.name}"`,
+                            const registeredEvents = p.events?.map(re => re.event_name).join('; ') || ''
+                            const baseData = [
+                                p.participant_code || p.qr_code || '',
+                                `"${p.full_name || p.name || ''}"`,
                                 p.email,
-                                p.phone,
-                                `"${p.college}"`,
-                                `"${p.department}"`,
-                                p.year_of_study,
-                                `"${getEventName(p.event1_id) || ''}"`,
-                                `"${getEventName(p.event2_id) || ''}"`,
-                                `"${getEventName(p.event3_id) || ''}"`
-                            ].join(",")
+                                p.phone || '',
+                                `"${p.custom_data?.college_name || p.college || ''}"`,
+                                `"${p.custom_data?.department || p.department || ''}"`,
+                                p.year_of_study || '',
+                                `"${registeredEvents}"`
+                            ]
+                            const customData = customFields.map(f => `"${p.custom_data?.[f.field_name] || ''}"`)
+                            return [...baseData, ...customData].join(",")
                         }).join("\n")
                     const encodedUri = encodeURI(csvContent)
                     const link = document.createElement("a")
@@ -257,14 +299,17 @@ export default function ParticipantsTab() {
                                 <TableHead className="text-gray-400 font-medium">College / Dept</TableHead>
                                 <TableHead className="text-gray-400 font-medium">Phone</TableHead>
                                 <TableHead className="text-gray-400 font-medium">Events</TableHead>
-                                <TableHead className="text-gray-400 font-medium">Status</TableHead>
+                                {/* Dynamic custom field columns */}
+                                {customFields.map((field) => (
+                                    <TableHead key={field.id} className="text-gray-400 font-medium">{field.field_label}</TableHead>
+                                ))}
                                 <TableHead className="text-gray-400 font-medium text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {participants.length === 0 && !loading && (
                                 <TableRow className="border-white/5">
-                                    <TableCell colSpan={7} className="text-center text-gray-500 py-8">No participants found</TableCell>
+                                    <TableCell colSpan={6 + customFields.length} className="text-center text-gray-500 py-8">No participants found</TableCell>
                                 </TableRow>
                             )}
                             {filteredParticipants.map((participant) => (
@@ -285,17 +330,21 @@ export default function ParticipantsTab() {
                                     <TableCell className="text-gray-400 text-xs font-mono">{participant.phone || '-'}</TableCell>
                                     <TableCell className="text-gray-400 text-xs">
                                         <div className="flex flex-col gap-1">
-                                            {participant.custom_data?.event_1 && <span>• {getEventName(participant.custom_data.event_1)}</span>}
-                                            {participant.custom_data?.event_2 && <span>• {getEventName(participant.custom_data.event_2)}</span>}
-                                            {participant.custom_data?.event_3 && <span>• {getEventName(participant.custom_data.event_3)}</span>}
-                                            {!participant.custom_data?.event_1 && !participant.custom_data?.event_2 && !participant.custom_data?.event_3 && <span className="text-gray-600">-</span>}
+                                            {participant.events && participant.events.length > 0 ? (
+                                                participant.events.map((re, idx) => (
+                                                    <span key={idx}>• {re.event_name}</span>
+                                                ))
+                                            ) : (
+                                                <span className="text-gray-600">-</span>
+                                            )}
                                         </div>
                                     </TableCell>
-                                    <TableCell>
-                                        <Badge variant={participant.status === 'approved' ? 'default' : 'secondary'}>
-                                            {participant.status || 'Pending'}
-                                        </Badge>
-                                    </TableCell>
+                                    {/* Dynamic custom field cells */}
+                                    {customFields.map((field) => (
+                                        <TableCell key={field.id} className="text-gray-400 text-xs">
+                                            {participant.custom_data?.[field.field_name] || '-'}
+                                        </TableCell>
+                                    ))}
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="icon" onClick={() => handleEditClick(participant)} className="text-gray-400 hover:text-white hover:bg-white/10 rounded-lg">
                                             <Pencil className="h-4 w-4" />

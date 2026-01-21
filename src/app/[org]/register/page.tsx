@@ -26,6 +26,8 @@ export default function RegistrationPage() {
     const [participantCode, setParticipantCode] = useState('');
 
     const [formId, setFormId] = useState<string | null>(null);
+    const [formDetails, setFormDetails] = useState<{ name: string, description: string | null } | null>(null);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [fields, setFields] = useState<FormField[]>([]);
     const [events, setEvents] = useState<any[]>([]);
 
@@ -47,7 +49,7 @@ export default function RegistrationPage() {
             // 1. Fetch Active Form
             const { data: form, error: formError } = await supabase
                 .from('registration_forms')
-                .select('id')
+                .select('id, name, description')
                 .eq('organization_id', organization.id)
                 .eq('is_active', true)
                 .single();
@@ -64,6 +66,20 @@ export default function RegistrationPage() {
             }
 
             setFormId(form.id);
+            setFormDetails({ name: form.name, description: form.description });
+
+            // 1b. Fetch latest Org Logo (Context might be stale)
+            const { data: orgData } = await supabase
+                .from('organizations')
+                .select('logo_url')
+                .eq('id', organization.id)
+                .single();
+
+            if (orgData?.logo_url) {
+                setLogoUrl(orgData.logo_url);
+            } else if (organization.logo_url) {
+                setLogoUrl(organization.logo_url);
+            }
 
             // 2. Fetch Fields
             const { data: fieldsData } = await supabase
@@ -181,10 +197,30 @@ export default function RegistrationPage() {
 
             setParticipantCode(insertedData.qr_code);
 
-            // 2. Insert Event Registrations (Many-to-Many)
+            // 2. Insert Event Registrations (Many-to-Many) with Participant Limit Check
             if (selectedEvents.length > 0) {
                 // De-duplicate events
                 const uniqueEvents = Array.from(new Set(selectedEvents));
+
+                // Check participant limits for each event
+                const maxParticipants = organization.max_participants_per_event || 100;
+
+                for (const eventId of uniqueEvents) {
+                    // Count existing registrations for this event
+                    const { count } = await supabase
+                        .from('event_registrations')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('event_id', eventId);
+
+                    if (count !== null && count >= maxParticipants) {
+                        // Get event name for better error message
+                        const event = events.find(e => e.id === eventId);
+                        toast.error(`Event "${event?.event_name || 'Selected event'}" has reached capacity (${maxParticipants} participants).`);
+                        setSubmitting(false);
+                        return;
+                    }
+                }
+
                 const eventInserts = uniqueEvents.map(eid => ({
                     participant_id: insertedData.id,
                     event_id: eid,
@@ -411,14 +447,29 @@ export default function RegistrationPage() {
 
     return (
         <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-gray-900 flex items-center justify-center">
-            <Card className="w-full max-w-2xl bg-gray-800 border-gray-700 text-white">
-                <CardHeader>
-                    <CardTitle className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400">
-                        {organization.org_name} Registration
-                    </CardTitle>
-                    <CardDescription className="text-gray-400">
-                        Please fill out the form below.
-                    </CardDescription>
+            <Card className="w-full max-w-4xl bg-gray-800 border-gray-700 text-white overflow-hidden shadow-2xl">
+                <CardHeader className="p-8 pb-6 border-b border-white/5 bg-white/[0.02]">
+                    <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-8">
+                        {(logoUrl || organization.logo_url) && (
+                            <div className="shrink-0">
+                                <img
+                                    src={logoUrl || organization.logo_url || ''}
+                                    alt={`${organization.org_name} Logo`}
+                                    className="h-28 w-28 sm:h-32 sm:w-32 object-contain drop-shadow-[0_0_15px_rgba(139,92,246,0.3)]"
+                                />
+                            </div>
+                        )}
+                        <div className="flex-1 text-center sm:text-left">
+                            <CardTitle className="text-2xl sm:text-4xl font-black tracking-tight leading-none whitespace-nowrap">
+                                <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-cyan-400 to-blue-400">
+                                    {formDetails?.name || `${organization.org_name} Registration`}
+                                </span>
+                            </CardTitle>
+                            <CardDescription className="text-gray-400 mt-3 text-sm sm:text-base">
+                                {formDetails?.description || "Please fill out the form below."}
+                            </CardDescription>
+                        </div>
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-6">

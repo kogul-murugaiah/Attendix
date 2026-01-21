@@ -9,12 +9,14 @@ interface OrgContextType {
     organization: Organization | null;
     loading: boolean;
     hasFeature: (feature: string) => boolean;
+    refresh: () => Promise<void>;
 }
 
 const OrgContext = createContext<OrgContextType>({
     organization: null,
     loading: true,
-    hasFeature: () => false
+    hasFeature: () => false,
+    refresh: async () => { }
 });
 
 export function OrganizationProvider({ children }: { children: React.ReactNode }) {
@@ -57,12 +59,22 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
         fetchOrg();
     }, [orgSlug, supabase]);
 
+    const refresh = async () => {
+        if (!orgSlug) return;
+        const { data } = await supabase
+            .from('organizations')
+            .select('*')
+            .eq('org_code', orgSlug)
+            .single();
+        if (data) setOrganization(data as Organization);
+    };
+
     const hasFeature = (feature: string) => {
         return organization?.features?.[feature] === true;
     };
 
     return (
-        <OrgContext.Provider value={{ organization, loading, hasFeature }}>
+        <OrgContext.Provider value={{ organization, loading, hasFeature, refresh }}>
             {children}
         </OrgContext.Provider>
     );

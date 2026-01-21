@@ -44,6 +44,44 @@ export default function EventsManager() {
         }
     }, [organization])
 
+    // Real-time subscription for new registrations
+    useEffect(() => {
+        if (!organization) return
+
+        const channel = supabase
+            .channel('events-manager-updates')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'student_registrations',
+                    filter: `organization_id=eq.${organization.id}`
+                },
+                (payload) => {
+                    console.log('Events Manager: New registration detected, refreshing events')
+                    fetchEvents()
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'event_registrations'
+                },
+                (payload) => {
+                    console.log('Events Manager: Event registration changed, refreshing events')
+                    fetchEvents()
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [organization])
+
     const fetchEvents = async () => {
         if (!organization) return
         setLoading(true)

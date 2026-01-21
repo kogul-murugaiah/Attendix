@@ -116,12 +116,12 @@ export default function FieldConfigDrawer({
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="bg-[#13131a] border-l border-white/10 text-white sm:max-w-[500px] flex flex-col h-full w-full">
-                <SheetHeader className="flex-none">
-                    <SheetTitle className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400">
+            <SheetContent className="bg-[#18181b]/95 backdrop-blur-xl border-l border-white/10 text-white sm:max-w-[500px] flex flex-col h-full w-full shadow-2xl shadow-black/50">
+                <SheetHeader className="flex-none pb-6 border-b border-white/5">
+                    <SheetTitle className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400">
                         {field ? 'Edit Field' : 'Add Custom Field'}
                     </SheetTitle>
-                    <SheetDescription className="text-gray-400">
+                    <SheetDescription className="text-gray-400 text-sm">
                         Configure the properties for this registration field.
                     </SheetDescription>
                 </SheetHeader>
@@ -129,28 +129,28 @@ export default function FieldConfigDrawer({
                 <div className="flex-1 overflow-y-auto py-6 pr-2 space-y-6">
                     {/* Label */}
                     <div className="space-y-2">
-                        <Label htmlFor="label" className="text-gray-300">Field Label <span className="text-red-400">*</span></Label>
+                        <Label htmlFor="label" className="text-gray-300 font-medium">Field Label <span className="text-purple-400">*</span></Label>
                         <Input
                             id="label"
                             value={formData.field_label}
                             onChange={(e) => setFormData({ ...formData, field_label: e.target.value })}
                             placeholder="e.g. T-Shirt Size"
-                            className="bg-black/50 border-white/10 text-white focus:border-purple-500/50"
+                            className="bg-black/40 border-white/10 text-white focus:border-purple-500/50 h-11"
                         />
                     </div>
 
-                    {/* Type - Locked if editing Custom Field? Usually okay to change unless strictly locked */}
+                    {/* Type */}
                     <div className="space-y-2">
-                        <Label htmlFor="type" className="text-gray-300">Field Type</Label>
+                        <Label htmlFor="type" className="text-gray-300 font-medium">Field Type</Label>
                         <Select
                             value={formData.field_type}
                             onValueChange={(val) => setFormData({ ...formData, field_type: val as FieldType })}
-                            disabled={field?.is_locked} // Locked fields types generally shouldn't change
+                            disabled={field?.is_locked}
                         >
-                            <SelectTrigger className="bg-black/50 border-white/10 text-white">
+                            <SelectTrigger className="bg-black/40 border-white/10 text-white h-11">
                                 <SelectValue />
                             </SelectTrigger>
-                            <SelectContent className="bg-[#13131a] border-white/10 text-white">
+                            <SelectContent className="bg-[#18181b] border-white/10 text-white">
                                 {FIELD_TYPES.map(t => (
                                     <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                                 ))}
@@ -160,70 +160,74 @@ export default function FieldConfigDrawer({
 
                     {/* Options (Conditional) */}
                     {['select', 'radio', 'checkbox'].includes(formData.field_type as string) && (!formData.field_name?.startsWith('event_') && !field?.field_name?.startsWith('event_')) && (
-                        <div className="space-y-2 bg-white/5 p-4 rounded-md border border-white/10">
-                            <Label htmlFor="options" className="text-gray-300">Options (Comma Separated)</Label>
+                        <div className="space-y-2 bg-gradient-to-b from-white/5 to-transparent p-4 rounded-xl border border-white/10">
+                            <Label htmlFor="options" className="text-gray-300 font-medium">Options (Comma Separated)</Label>
                             <Textarea
                                 id="options"
                                 value={optionsString}
                                 onChange={(e) => setOptionsString(e.target.value)}
                                 placeholder="Small, Medium, Large, XL"
-                                className="bg-black/50 border-white/10 text-white focus:border-purple-500/50 min-h-[80px]"
+                                className="bg-black/40 border-white/10 text-white focus:border-purple-500/50 min-h-[100px] font-mono text-sm leading-relaxed"
                             />
-                            <p className="text-xs text-gray-500">Enter options separated by commas.</p>
+                            <p className="text-xs text-gray-500 font-medium">Enter options separated by commas.</p>
                         </div>
                     )}
 
                     {/* Dynamic Event Options Message */}
                     {(formData.field_name?.startsWith('event_') || field?.field_name?.startsWith('event_')) && (
-                        <div className="bg-purple-500/10 border border-purple-500/20 p-4 rounded-lg">
+                        <div className="bg-purple-900/10 border border-purple-500/20 p-4 rounded-xl flex gap-3 items-start">
+                            <div className="w-1.5 h-1.5 rounded-full bg-purple-400 mt-2 shrink-0" />
                             <p className="text-sm text-purple-200">
                                 <strong>Dynamic Event Field:</strong> The options for this dropdown are automatically populated with your active events.
                             </p>
                         </div>
                     )}
 
-                    {/* Common Props */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="flex items-center space-x-2 pt-2">
-                            <Checkbox
-                                id="required"
-                                checked={formData.is_required}
-                                onCheckedChange={(c) => setFormData({ ...formData, is_required: c as boolean })}
-                                disabled={field?.is_locked} // Core fields might lock this
-                                className="border-white/20 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
-                            />
-                            <Label htmlFor="required" className="text-gray-300 cursor-pointer">Required Field</Label>
+                    {/* Checkbox Props */}
+                    <div className="flex items-center space-x-3 p-4 border border-white/5 rounded-xl bg-white/[0.02]">
+                        <Checkbox
+                            id="required"
+                            checked={formData.is_required}
+                            onCheckedChange={(c) => setFormData({ ...formData, is_required: c as boolean })}
+                            disabled={field?.is_locked}
+                            className="border-white/20 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 w-5 h-5 rounded-md"
+                        />
+                        <div className="space-y-0.5">
+                            <Label htmlFor="required" className="text-gray-200 font-medium cursor-pointer text-base">Required Field</Label>
+                            <p className="text-xs text-gray-500">Student must fill this before submitting.</p>
                         </div>
                     </div>
 
                     {/* Placeholder & Help Text */}
-                    <div className="space-y-2">
-                        <Label htmlFor="placeholder" className="text-gray-300">Placeholder Text</Label>
-                        <Input
-                            id="placeholder"
-                            value={formData.placeholder || ''}
-                            onChange={(e) => setFormData({ ...formData, placeholder: e.target.value })}
-                            placeholder="e.g. Select your size..."
-                            className="bg-black/50 border-white/10 text-white"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="help" className="text-gray-300">Help / Query Text</Label>
-                        <Input
-                            id="help"
-                            value={formData.help_text || ''}
-                            onChange={(e) => setFormData({ ...formData, help_text: e.target.value })}
-                            placeholder="Detailed instructions for the user"
-                            className="bg-black/50 border-white/10 text-white"
-                        />
+                    <div className="space-y-4 pt-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="placeholder" className="text-gray-300 font-medium">Placeholder Text</Label>
+                            <Input
+                                id="placeholder"
+                                value={formData.placeholder || ''}
+                                onChange={(e) => setFormData({ ...formData, placeholder: e.target.value })}
+                                placeholder="e.g. Select your size..."
+                                className="bg-black/40 border-white/10 text-white h-10 text-sm"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="help" className="text-gray-300 font-medium">Help / Query Text</Label>
+                            <Input
+                                id="help"
+                                value={formData.help_text || ''}
+                                onChange={(e) => setFormData({ ...formData, help_text: e.target.value })}
+                                placeholder="Detailed instructions for the user"
+                                className="bg-black/40 border-white/10 text-white h-10 text-sm"
+                            />
+                        </div>
                     </div>
                 </div>
 
-                <SheetFooter className="flex-none pt-4 border-t border-white/10 mt-auto">
-                    <Button onClick={() => onOpenChange(false)} className="bg-white/5 hover:bg-white/10 text-white border border-white/10">
+                <SheetFooter className="flex-none pt-6 border-t border-white/10 mt-auto grid grid-cols-2 gap-4">
+                    <Button onClick={() => onOpenChange(false)} variant="outline" className="w-full bg-transparent hover:bg-white/5 text-gray-300 border-white/10 h-11">
                         Cancel
                     </Button>
-                    <Button onClick={handleSave} className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white hover:from-purple-500 hover:to-cyan-500">
+                    <Button onClick={handleSave} className="w-full bg-gradient-to-r from-purple-600 to-cyan-600 text-white hover:from-purple-500 hover:to-cyan-500 h-11 border-0 shadow-lg shadow-purple-900/20">
                         {field ? 'Save Changes' : 'Add Field'}
                     </Button>
                 </SheetFooter>

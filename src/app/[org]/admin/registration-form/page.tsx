@@ -374,8 +374,15 @@ export default function RegistrationFormPage() {
     if (!form) return <div className="min-h-screen text-white flex items-center justify-center">Form initialization failed. Check DB triggers.</div>;
 
     return (
-        <div className="min-h-screen bg-[#0a0a0f] text-white p-8">
-            <div className="max-w-4xl mx-auto space-y-8">
+        <div className="min-h-screen bg-[#0a0a0f] text-white font-sans selection:bg-purple-500/30">
+            {/* Background Gradients */}
+            <div className="fixed inset-0 pointer-events-none">
+                <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-purple-900/10 to-transparent"></div>
+                <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-purple-600/5 rounded-full blur-[120px]"></div>
+                <div className="absolute top-[20%] left-[-10%] w-[400px] h-[400px] bg-cyan-600/5 rounded-full blur-[100px]"></div>
+            </div>
+
+            <div className="relative z-10 max-w-5xl mx-auto p-6 space-y-8">
 
                 {/* Header & Actions */}
                 <div className="flex flex-col gap-6">

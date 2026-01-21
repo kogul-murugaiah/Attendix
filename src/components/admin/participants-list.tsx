@@ -32,6 +32,7 @@ export default function ParticipantsTab() {
     const [participants, setParticipants] = useState<Participant[]>([])
     const [events, setEvents] = useState<{ id: string, event_name: string }[]>([])
     const [customFields, setCustomFields] = useState<FormField[]>([])
+    const [eventSlots, setEventSlots] = useState<number>(3) // Default to 3, updated dynamically
     const [search, setSearch] = useState('')
     const [loading, setLoading] = useState(false)
     const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null)
@@ -44,98 +45,35 @@ export default function ParticipantsTab() {
         college: '',
         department: '',
         year_of_study: '',
-        event1_id: '' as string | null,
-        event2_id: '' as string | null,
-        event3_id: '' as string | null,
+        // Dynamic event IDs will be handled via index access or spread
         participant_code: ''
     })
+    // We'll use a dynamic object for events in editFormData now
+    const [dynamicEventIds, setDynamicEventIds] = useState<Record<string, string | null>>({})
 
-    const handleSendTicket = async (participant: Participant) => {
-        if (!participant.email) {
-            toast.error('Participant has no email address')
-            return
-        }
-        if (!participant.participant_code && !participant.qr_code) {
-            toast.error('Participant has no generated code')
-            return
-        }
 
+    // ... (rest of simple states)
+
+    const handleSendTicket = async (participantId: string, email: string) => {
+        setSendingEmailId(participantId)
         try {
-            setSendingEmailId(participant.id)
-            toast.info('Sending ticket to ' + participant.email + '...')
-
             const response = await fetch('/api/send-ticket', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    participantId: participant.id,
-                    email: participant.email,
-                    name: participant.full_name || participant.name,
-                    participantCode: participant.participant_code || participant.qr_code,
-                    eventName: organization?.org_name || 'Event',
-                    organizationName: organization?.org_name,
-                    // Additional check-in details if needed
-                })
+                body: JSON.stringify({ participantId, email })
             })
-
-            const data = await response.json()
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to send email')
-            }
-
-            toast.success('Ticket sent successfully!')
-        } catch (error: any) {
-            console.error('Send ticket error:', error)
-            toast.error('Failed to send ticket: ' + error.message)
+            if (!response.ok) throw new Error('Failed to send ticket')
+            toast.success('Ticket sent successfully')
+        } catch (error) {
+            console.error('Error sending ticket:', error)
+            toast.error('Failed to send ticket')
         } finally {
             setSendingEmailId(null)
         }
     }
 
-    useEffect(() => {
-        if (!organization?.id) return
 
-        fetchParticipants()
-        fetchEvents()
-        fetchFormFields()
 
-        // 1. Listen for Database Changes (Backup & Check-ins)
-        const channel = supabase
-            .channel('admin-participants-list-changes')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'student_registrations',
-                    filter: `organization_id=eq.${organization.id}`
-                },
-                () => {
-                    fetchParticipants()
-                }
-            )
-            .subscribe()
-
-        // 2. Listen for Global Broadcasts (Instant New Student)
-        const globalChannel = supabase
-            .channel('app-global')
-            .on(
-                'broadcast',
-                { event: 'new-registration' },
-                (payload) => {
-                    if (payload.payload.organization_id === organization.id) {
-                        fetchParticipants()
-                    }
-                }
-            )
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-            supabase.removeChannel(globalChannel)
-        }
-    }, [organization?.id])
 
     const fetchEvents = async () => {
         if (!organization) return
@@ -155,23 +93,40 @@ export default function ParticipantsTab() {
 
         if (!formData) return
 
-        // Fetch non-core fields (custom fields only)
+        // Fetch all fields to determine event slots and custom fields
         const { data: fieldsData } = await supabase
             .from('form_fields')
             .select('*')
             .eq('form_id', formData.id)
-            .eq('is_core_field', false)
             .order('display_order')
 
         if (fieldsData) {
-            // Filter out 'event_' fields as they are shown in the specific 'Events' column
-            const displayFields = (fieldsData as FormField[]).filter(f => !f.field_name.startsWith('event_'))
+            // 1. Calculate Event Slots
+            // Count fields that are potentially event selectors (usually named event_1, event_2 etc or starting with event_)
+            const eventFields = (fieldsData as FormField[]).filter(f => f.field_name.startsWith('event_') || f.field_name.includes('event'))
+            // If explicit event fields exist, use their count. Otherwise fallback to observed max or default 3.
+            // For now, let's assume any field starting with 'event_' is an event selector.
+            // Be careful not to count 'events' array if it existed as a field (unlikely).
+            // A safer bet might be checking `field_type` if it's a select/radio for events?
+            // User's previous code implies fields like 'event_1', 'event_2'.
+            const calculatedSlots = eventFields.length
+            setEventSlots(calculatedSlots > 0 ? calculatedSlots : 3)
+
+            // 2. Set Custom Fields (for table columns)
+            // Filter out core fields AND event fields (since events have their own dedicated column)
+            const displayFields = (fieldsData as FormField[]).filter(f => !f.is_core_field && !f.field_name.startsWith('event_'))
             setCustomFields(displayFields)
         }
+
     }
 
     const fetchParticipants = async () => {
-        if (!organization) return
+        if (!organization) {
+            console.log('fetchParticipants: No organization')
+            return
+        }
+
+        console.log('fetchParticipants: Fetching for org', organization.id)
 
         try {
             setLoading(true)
@@ -184,8 +139,9 @@ export default function ParticipantsTab() {
 
             if (error) {
                 console.error('Error fetching participants:', error)
-                toast.error('Failed to load participants')
+                toast.error('Failed to load participants: ' + error.message)
             } else {
+                console.log('fetchParticipants: Loaded', data?.length, 'participants')
                 // Transform data to include event names
                 const transformed = (data || []).map((p: any) => ({
                     ...p,
@@ -203,6 +159,7 @@ export default function ParticipantsTab() {
             setLoading(false)
         }
     }
+
     const handleEditClick = (participant: Participant) => {
         setEditingParticipant(participant)
         const customData = participant.custom_data || {}
@@ -216,6 +173,22 @@ export default function ParticipantsTab() {
         // The default form (backfill) uses 'field_name': 'event_preference_1'
 
         const regEvents = participant.events || []
+
+        // Dynamic Event Population
+        const currentEventIds: Record<string, string | null> = {}
+        for (let i = 1; i <= eventSlots; i++) {
+            const index = i - 1
+            // Try getting from registered events first (regEvents), then custom fields
+            const evtId = regEvents[index]?.event_id ||
+                customData[`event_${i}`] ||
+                customData[`event_preference_${i}`] ||
+                customData[`event${i}_id`] ||
+                (participant as any)[`event${i}_id`] ||
+                null
+            currentEventIds[`event_${i}`] = evtId
+        }
+        setDynamicEventIds(currentEventIds)
+
         setEditFormData({
             name: participant.full_name || participant.name || '',
             email: participant.email,
@@ -223,12 +196,6 @@ export default function ParticipantsTab() {
             college: customData.college_name || customData.college || participant.college || '',
             department: customData.department || participant.department || '',
             year_of_study: customData.year_of_study || participant.year_of_study || '',
-
-            // Prioritize IDs from event_registrations (participant.events)
-            event1_id: regEvents[0]?.event_id || customData.event_1 || customData.event_preference_1 || customData.event1_id || participant.event1_id || null,
-            event2_id: regEvents[1]?.event_id || customData.event_2 || customData.event_preference_2 || customData.event2_id || participant.event2_id || null,
-            event3_id: regEvents[2]?.event_id || customData.event_3 || customData.event_preference_3 || customData.event3_id || participant.event3_id || null,
-
             participant_code: participant.participant_code || participant.qr_code || ''
         })
         setEditOpen(true)
@@ -238,21 +205,23 @@ export default function ParticipantsTab() {
         e.preventDefault()
         if (!editingParticipant) return
 
-        // Prepare custom_data update
+        // Prepare custom_data update with dynamic events
         const currentCustomData = editingParticipant.custom_data || {};
+        const dynamicEventsUpdates: Record<string, any> = {};
+
+        // Loop through slots to populate custom_data fields
+        for (let i = 1; i <= eventSlots; i++) {
+            const eid = dynamicEventIds[`event_${i}`];
+            dynamicEventsUpdates[`event_${i}`] = eid;
+            dynamicEventsUpdates[`event_preference_${i}`] = eid;
+        }
+
         const updatedCustomData = {
             ...currentCustomData,
             college_name: editFormData.college,
             department: editFormData.department,
             year_of_study: editFormData.year_of_study,
-            // Save back using standard keys consistent with registration
-            event_1: editFormData.event1_id,
-            event_2: editFormData.event2_id,
-            event_3: editFormData.event3_id,
-            // Keep legacy/alternate keys in sync just in case
-            event_preference_1: editFormData.event1_id,
-            event_preference_2: editFormData.event2_id,
-            event_preference_3: editFormData.event3_id
+            ...dynamicEventsUpdates
         };
 
         const { error } = await supabase
@@ -263,8 +232,8 @@ export default function ParticipantsTab() {
                 phone: editFormData.phone,
                 // Update custom_data with merged fields
                 custom_data: updatedCustomData,
-                // Also update the primary event_id if event1 is set
-                event_id: editFormData.event1_id || null
+                // Update primary event_id (use first selected event as main)
+                event_id: dynamicEventIds['event_1'] || null
             })
             .eq('id', editingParticipant.id)
 
@@ -272,14 +241,17 @@ export default function ParticipantsTab() {
             toast.error('Failed to update participant: ' + error.message)
         } else {
             // Update event_registrations (Source of Truth for "Events" column)
-            const newEventIds = [editFormData.event1_id, editFormData.event2_id, editFormData.event3_id].filter(id => id && id !== 'none') as string[];
+            // Collect all non-null, non-none IDs from dynamicEventIds
+            const newEventIds = Object.values(dynamicEventIds).filter(id => id && id !== 'none') as string[];
+            // Ensure uniqueness
+            const uniqueEventIds = Array.from(new Set(newEventIds));
 
             // 1. Delete old registrations
             await supabase.from('event_registrations').delete().eq('participant_id', editingParticipant.id);
 
             // 2. Insert new ones
-            if (newEventIds.length > 0) {
-                const eventInserts = newEventIds.map(eid => ({
+            if (uniqueEventIds.length > 0) {
+                const eventInserts = uniqueEventIds.map(eid => ({
                     participant_id: editingParticipant.id,
                     event_id: eid,
                     attendance_status: false // Default to false on change
@@ -303,8 +275,46 @@ export default function ParticipantsTab() {
         (p.participant_code || p.qr_code || '').toLowerCase().includes(search.toLowerCase())
     )
 
+    // Initial Fetch
+    useEffect(() => {
+        if (organization) {
+            console.log('UseEffect triggered. Fetching data for org:', organization.id)
+            fetchFormFields()
+            fetchEvents()
+            fetchParticipants()
+        }
+    }, [organization])
+
+    // Realtime subscription
+    useEffect(() => {
+        if (!organization) return
+
+        const channel = supabase
+            .channel('table-db-changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'student_registrations',
+                    filter: `organization_id=eq.${organization.id}`
+                },
+                (payload) => {
+                    console.log('Realtime update received:', payload)
+                    fetchParticipants()
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [organization])
+
     return (
         <div className="space-y-6">
+
+
             <div className="flex items-center gap-4">
                 <div className="relative flex-1 group">
                     <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-cyan-500/20 rounded-xl blur-md opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -317,6 +327,9 @@ export default function ParticipantsTab() {
                 </div>
                 <Button onClick={fetchParticipants} className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white border-0 rounded-xl hover:shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:scale-105 transition-all duration-300">
                     Search
+                </Button>
+                <Button variant="outline" className="border-blue-500/20 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 rounded-xl backdrop-blur-md" onClick={fetchParticipants} disabled={loading}>
+                    {loading ? 'Refreshing...' : 'Refresh'}
                 </Button>
                 <Button variant="outline" className="border-green-500/20 bg-green-500/10 text-green-400 hover:bg-green-500/20 hover:text-green-300 rounded-xl backdrop-blur-md" onClick={() => {
                     // Excel Export Logic
@@ -511,21 +524,39 @@ export default function ParticipantsTab() {
                         <div className="space-y-3 pt-2 border-t border-white/5">
                             <Label className="text-cyan-400 text-xs uppercase tracking-wider font-bold">Registered Events</Label>
                             <div className="grid gap-4">
-                                {[1, 2, 3].map(num => (
-                                    <div key={num} className="space-y-1">
-                                        <Label className="text-gray-500 text-xs">Event {num}</Label>
-                                        <select
-                                            className="w-full h-10 px-3 bg-black/50 border border-white/10 rounded-xl text-white focus:border-purple-500/50 focus:ring-purple-500/20 outline-none"
-                                            value={editFormData[`event${num}_id` as keyof typeof editFormData] as string || ''}
-                                            onChange={e => setEditFormData({ ...editFormData, [`event${num}_id`]: e.target.value || null })}
-                                        >
-                                            <option value="">-- None --</option>
-                                            {events.map(ev => (
-                                                <option key={ev.id} value={ev.id} className="bg-gray-900">{ev.event_name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                ))}
+                                {Array.from({ length: eventSlots }, (_, i) => i + 1).map(num => {
+                                    // Get IDs of events selected in other slots
+                                    const otherSelectedIds = Array.from({ length: eventSlots }, (_, i) => i + 1)
+                                        .filter(n => n !== num)
+                                        .map(n => dynamicEventIds[`event_${n}`])
+                                        .filter(id => id && id !== 'none' && id !== '')
+
+                                    return (
+                                        <div key={num} className="space-y-1">
+                                            <Label className="text-gray-500 text-xs">Event {num}</Label>
+                                            <select
+                                                className="w-full h-10 px-3 bg-black/50 border border-white/10 rounded-xl text-white focus:border-purple-500/50 focus:ring-purple-500/20 outline-none"
+                                                value={dynamicEventIds[`event_${num}`] || ''}
+                                                onChange={e => setDynamicEventIds({ ...dynamicEventIds, [`event_${num}`]: e.target.value || null })}
+                                            >
+                                                <option value="">-- None --</option>
+                                                {events.map(ev => {
+                                                    const isDisabled = otherSelectedIds.includes(ev.id)
+                                                    return (
+                                                        <option
+                                                            key={ev.id}
+                                                            value={ev.id}
+                                                            disabled={isDisabled}
+                                                            className={isDisabled ? "bg-gray-800 text-gray-500" : "bg-gray-900"}
+                                                        >
+                                                            {ev.event_name} {isDisabled ? '(Selected)' : ''}
+                                                        </option>
+                                                    )
+                                                })}
+                                            </select>
+                                        </div>
+                                    )
+                                })}
                             </div>
                         </div>
 

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white flex flex-col">
+    <div className="min-h-screen bg-[#0a0a0f] text-white flex flex-col [&~footer]:hidden">
       {/* Hero Section */}
       <header className="flex items-center justify-between p-6 max-w-7xl mx-auto w-full">
         <div className="flex items-center gap-0">
@@ -51,22 +51,22 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8">
-            <Link href="/register">
-              <Button size="lg" className="h-14 px-8 text-lg rounded-full bg-white text-black hover:bg-gray-200">
+            <Link href="/onboarding">
+              <Button size="lg" className="h-14 px-8 text-lg rounded-full bg-white text-black hover:bg-gray-200 transition-all hover:scale-105">
                 Create Your Organization
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button size="lg" variant="outline" className="h-14 px-8 text-lg rounded-full border-white/20 text-white hover:bg-white/10">
-                Access Dashboard
               </Button>
             </Link>
           </div>
         </div>
       </main>
 
-      <footer className="p-8 border-t border-white/5 text-center text-gray-500 text-sm">
-        <p>© 2024 Attendix Platform. All rights reserved.</p>
+      {/* Landing Page Footer - Larger and more prominent */}
+      <footer className="relative p-8 border-t border-white/10 text-center bg-black/20 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto">
+          <p className="text-gray-400 text-sm">
+            © 2026 Attendix. All rights reserved. | Developed by <span className="text-purple-400 font-medium">Kogul Murugaiah</span>
+          </p>
+        </div>
       </footer>
     </div>
   );

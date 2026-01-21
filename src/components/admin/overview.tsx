@@ -22,12 +22,38 @@ export default function OverviewTab() {
         }
     }, [organization])
 
+    // Real-time subscription for stats updates
+    useEffect(() => {
+        if (!organization) return
+
+        const channel = supabase
+            .channel('overview-stats-updates')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'student_registrations',
+                    filter: `organization_id=eq.${organization.id}`
+                },
+                (payload) => {
+                    console.log('Overview: Student registration changed, refreshing stats')
+                    fetchStats()
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [organization])
+
     const fetchStats = async () => {
         if (!organization) return
 
-        // Parallel fetch
-        const p1 = supabase.from('participants').select('id', { count: 'exact', head: true }).eq('organization_id', organization.id)
-        const p2 = supabase.from('participants').select('id', { count: 'exact', head: true }).eq('gate_entry_status', true).eq('organization_id', organization.id)
+        // Parallel fetch - Query student_registrations instead of participants
+        const p1 = supabase.from('student_registrations').select('id', { count: 'exact', head: true }).eq('organization_id', organization.id)
+        const p2 = supabase.from('student_registrations').select('id', { count: 'exact', head: true }).eq('checked_in', true).eq('organization_id', organization.id)
         const p3 = supabase.from('events').select('*').eq('organization_id', organization.id)
 
         const [r1, r2, r3] = await Promise.all([p1, p2, p3])

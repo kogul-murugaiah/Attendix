@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 
 export default function Home() {
@@ -6,9 +7,17 @@ export default function Home() {
     <div className="min-h-screen bg-[#0a0a0f] text-white flex flex-col">
       {/* Hero Section */}
       <header className="flex items-center justify-between p-6 max-w-7xl mx-auto w-full">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-cyan-500"></div>
-          <span className="font-bold text-xl">Attendix</span>
+        <div className="flex items-center gap-0">
+          <div className="relative w-16 h-16">
+            <Image
+              src="/logo.png"
+              alt="Attendix"
+              fill
+              className="object-contain"
+              priority
+            />
+          </div>
+          <span className="font-bold text-2xl bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400 -ml-3">Attendix</span>
         </div>
         <nav className="hidden md:flex gap-6 text-sm text-gray-400">
           <a href="#" className="hover:text-white transition-colors">Features</a>

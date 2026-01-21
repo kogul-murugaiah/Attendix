@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { OrgTable } from "@/components/super-admin/OrgTable"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, Building2, CreditCard, Activity } from "lucide-react"
+import Image from "next/image"
 
 export default async function SuperAdminDashboard() {
     const supabase = await createClient()
@@ -43,7 +44,19 @@ export default async function SuperAdminDashboard() {
     return (
         <div className="min-h-screen bg-[#0a0a0f] p-8 space-y-8">
             <div className="space-y-2">
-                <h1 className="text-3xl font-bold text-white tracking-tight">Super Admin Dashboard</h1>
+                <div className="flex items-center gap-0 mb-4">
+                    <div className="relative w-20 h-20">
+                        <Image
+                            src="/logo.png"
+                            alt="Attendix"
+                            fill
+                            className="object-contain"
+                            priority
+                        />
+                    </div>
+                    <span className="text-4xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400 -ml-5">Attendix</span>
+                </div>
+                <h1 className="text-xl font-semibold text-gray-200">Super Admin Dashboard</h1>
                 <p className="text-gray-400">System overview and management.</p>
             </div>
 

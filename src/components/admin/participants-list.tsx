@@ -19,8 +19,9 @@ import { FormField } from '@/lib/types/registration'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Pencil } from 'lucide-react'
+import { Pencil, FileSpreadsheet } from 'lucide-react'
 import { Badge } from "@/components/ui/badge"
+import * as XLSX from 'xlsx'
 
 export default function ParticipantsTab() {
     const { organization } = useOrganization()
@@ -170,6 +171,7 @@ export default function ParticipantsTab() {
         // OR the field label "Event Preference 1"?
         // The default form (backfill) uses 'field_name': 'event_preference_1'
 
+        const regEvents = participant.events || []
         setEditFormData({
             name: participant.full_name || participant.name || '',
             email: participant.email,
@@ -178,10 +180,10 @@ export default function ParticipantsTab() {
             department: customData.department || participant.department || '',
             year_of_study: customData.year_of_study || participant.year_of_study || '',
 
-            // Try to find event IDs from likely field names - USER CONFIRMED KEYS ARE event_1, event_2, event_3
-            event1_id: customData.event_1 || customData.event_preference_1 || customData.event1_id || participant.event1_id || null,
-            event2_id: customData.event_2 || customData.event_preference_2 || customData.event2_id || participant.event2_id || null,
-            event3_id: customData.event_3 || customData.event_preference_3 || customData.event3_id || participant.event3_id || null,
+            // Prioritize IDs from event_registrations (participant.events)
+            event1_id: regEvents[0]?.event_id || customData.event_1 || customData.event_preference_1 || customData.event1_id || participant.event1_id || null,
+            event2_id: regEvents[1]?.event_id || customData.event_2 || customData.event_preference_2 || customData.event2_id || participant.event2_id || null,
+            event3_id: regEvents[2]?.event_id || customData.event_3 || customData.event_preference_3 || customData.event3_id || participant.event3_id || null,
 
             participant_code: participant.participant_code || participant.qr_code || ''
         })
@@ -225,6 +227,22 @@ export default function ParticipantsTab() {
         if (error) {
             toast.error('Failed to update participant: ' + error.message)
         } else {
+            // Update event_registrations (Source of Truth for "Events" column)
+            const newEventIds = [editFormData.event1_id, editFormData.event2_id, editFormData.event3_id].filter(id => id && id !== 'none') as string[];
+
+            // 1. Delete old registrations
+            await supabase.from('event_registrations').delete().eq('participant_id', editingParticipant.id);
+
+            // 2. Insert new ones
+            if (newEventIds.length > 0) {
+                const eventInserts = newEventIds.map(eid => ({
+                    participant_id: editingParticipant.id,
+                    event_id: eid,
+                    attendance_status: false // Default to false on change
+                }));
+                await supabase.from('event_registrations').insert(eventInserts);
+            }
+
             toast.success('Participant updated successfully')
             setEditOpen(false)
             fetchParticipants()
@@ -255,6 +273,36 @@ export default function ParticipantsTab() {
                 </div>
                 <Button onClick={fetchParticipants} className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white border-0 rounded-xl hover:shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:scale-105 transition-all duration-300">
                     Search
+                </Button>
+                <Button variant="outline" className="border-green-500/20 bg-green-500/10 text-green-400 hover:bg-green-500/20 hover:text-green-300 rounded-xl backdrop-blur-md" onClick={() => {
+                    // Excel Export Logic
+                    const baseHeaders = ['Code', 'Name', 'Email', 'Phone', 'College', 'Department', 'Year', 'Events']
+                    const customHeaders = customFields.map(f => f.field_label)
+                    const headers = [...baseHeaders, ...customHeaders]
+
+                    const data = participants.map(p => {
+                        const registeredEvents = p.events?.map(re => re.event_name).join('; ') || ''
+                        const baseData = [
+                            p.participant_code || p.qr_code || '',
+                            p.full_name || p.name || '',
+                            p.email,
+                            p.phone || '',
+                            p.custom_data?.college_name || p.college || '',
+                            p.custom_data?.department || p.department || '',
+                            p.year_of_study || '',
+                            registeredEvents
+                        ]
+                        const customData = customFields.map(f => p.custom_data?.[f.field_name] || '')
+                        return [...baseData, ...customData]
+                    })
+
+                    const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
+                    const wb = XLSX.utils.book_new()
+                    XLSX.utils.book_append_sheet(wb, ws, "Participants")
+                    XLSX.writeFile(wb, "Participants.xlsx")
+                }}>
+                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    Export Excel
                 </Button>
                 <Button variant="outline" className="border-white/10 bg-black/50 text-gray-300 hover:bg-white/10 hover:text-white rounded-xl backdrop-blur-md" onClick={() => {
                     // CSV Export Logic

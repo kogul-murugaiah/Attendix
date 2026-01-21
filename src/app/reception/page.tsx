@@ -168,6 +168,7 @@ export default function ReceptionDashboard() {
                 department: r.department,
                 year_of_study: r.year_of_study,
                 custom_data: r.custom_data,
+                created_at: r.created_at,
                 events: [] // Default to empty array as reception view doesn't render event specific details yet
             }))
             setParticipants(mapped)
@@ -292,9 +293,13 @@ export default function ReceptionDashboard() {
             const participant: Participant = {
                 id: userData.id,
                 name: userData.full_name,
+                full_name: userData.full_name, // Also add full_name to be safe if type requires it
+                email: userData.email,
                 participant_code: userData.qr_code,
                 gate_entry_status: userData.checked_in,
-                organization_id: userData.organization_id
+                organization_id: userData.organization_id,
+                created_at: userData.created_at,
+                events: [] // Default empty array
             }
 
             // 2. Check Status

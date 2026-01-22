@@ -337,59 +337,63 @@ export default function EventScannerPage() {
         setScanResult(null)
 
         try {
+            // 1. Find participant by QR code
             const { data: userData, error } = await supabase
                 .from('student_registrations')
-                .select('*')
-                .or(`participant_code.eq.${code},qr_code.eq.${code}`)
-                .single()
+                .select('*, event_registrations(*)')
+                .eq('qr_code', code)
+                .eq('organization_id', assignedEvent.organization_id)
+                .maybeSingle()
 
             if (error || !userData) {
                 setScanResult({ status: 'error', message: 'Invalid QR Code' })
                 return
             }
 
-            // Map locally for logic checks
             const p: any = userData
-            const event1_id = p.event1_id
-            const event2_id = p.event2_id
-            const event3_id = p.event3_id
 
-            const isRegistered =
-                event1_id === assignedEvent.id ||
-                event2_id === assignedEvent.id ||
-                event3_id === assignedEvent.id
+            // 2. Check if registered for THIS event using event_registrations
+            const eventRegistration = p.event_registrations?.find(
+                (er: any) => er.event_id === assignedEvent.id
+            )
 
-            if (!isRegistered) {
-                setScanResult({ status: 'error', message: 'Not Registered for this Event', participant: { name: p.full_name, participant_code: p.participant_code } as any })
+            if (!eventRegistration) {
+                setScanResult({
+                    status: 'error',
+                    message: 'Not Registered for this Event',
+                    participant: { name: p.full_name, participant_code: p.qr_code } as any
+                })
                 await logScan(p.id, 'not_eligible')
                 return
             }
 
-            // Check Reception Entry
+            // 3. Check Reception Entry
             if (!p.checked_in) {
-                setScanResult({ status: 'error', message: 'Use Reception Gate First', participant: { name: p.full_name, participant_code: p.participant_code } as any })
+                setScanResult({
+                    status: 'error',
+                    message: 'Use Reception Gate First',
+                    participant: { name: p.full_name, participant_code: p.qr_code } as any
+                })
                 await logScan(p.id, 'entry_not_confirmed')
                 return
             }
 
-            // Check if already attended
-            // We need to pass a mapped object to checkAttendanceStatus, or duplicate logic
-            // Let's simplest logic here:
-            let alreadyAttended = false
-            if (event1_id === assignedEvent.id) alreadyAttended = p.event1_attendance
-            else if (event2_id === assignedEvent.id) alreadyAttended = p.event2_attendance
-            else if (event3_id === assignedEvent.id) alreadyAttended = p.event3_attendance
-
-            if (alreadyAttended) {
-                setScanResult({ status: 'error', message: 'Already Marked Present', participant: { name: p.full_name, participant_code: p.participant_code } as any })
+            // 4. Check if already attended
+            if (eventRegistration.attendance_status) {
+                setScanResult({
+                    status: 'error',
+                    message: 'Already Marked Present',
+                    participant: { name: p.full_name, participant_code: p.qr_code } as any
+                })
                 await logScan(p.id, 'already_scanned')
                 return
             }
 
-            // Mark Attendance
+            // 5. Mark Attendance
             await handleMarkAttendance(p.id)
 
         } catch (err) {
+            console.error('Scan error:', err)
             setScanResult({ status: 'error', message: 'Unexpected Error' })
         } finally {
             setProcessing(false)

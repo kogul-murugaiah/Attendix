@@ -675,20 +675,48 @@ export default function EventScannerPage() {
 
                             {/* Scan Result/Status */}
                             {scanResult && (
-                                <div className={`p-4 rounded-xl mb-4 border ${scanResult.status === 'success'
-                                    ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                                    : 'bg-red-500/10 border-red-500/30 text-red-400'
+                                <div className={`p-6 rounded-xl mb-4 border ${scanResult.status === 'success'
+                                    ? 'bg-green-500/10 border-green-500/30'
+                                    : 'bg-red-500/10 border-red-500/30'
                                     }`}>
-                                    <div className="flex items-center gap-3">
-                                        {scanResult.status === 'success' ? <CheckCircle className="w-6 h-6" /> : <XCircle className="w-6 h-6" />}
-                                        <div>
-                                            <p className="font-bold text-lg">{scanResult.message}</p>
+                                    <div className="flex items-center gap-3 mb-4">
+                                        {scanResult.status === 'success' ? <CheckCircle className="w-8 h-8 text-green-400" /> : <XCircle className="w-8 h-8 text-red-400" />}
+                                        <div className="flex-1">
+                                            <p className={`font-bold text-xl ${scanResult.status === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                                                {scanResult.message}
+                                            </p>
                                             {scanResult.participant && (
-                                                <div className="text-sm opacity-80 mt-1">
-                                                    {scanResult.participant.name} ({scanResult.participant.participant_code})
+                                                <div className="text-sm text-gray-300 mt-1">
+                                                    <p className="font-medium">{scanResult.participant.name}</p>
+                                                    <p className="text-gray-400">Code: {scanResult.participant.participant_code}</p>
                                                 </div>
                                             )}
                                         </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-3 mt-4">
+                                        <Button
+                                            onClick={() => {
+                                                setScanResult(null)
+                                                setManualCode('')
+                                            }}
+                                            className="flex-1 bg-purple-600 hover:bg-purple-500 text-white h-12 text-base font-medium"
+                                        >
+                                            <Camera className="w-5 h-5 mr-2" />
+                                            Continue Scanning
+                                        </Button>
+                                        <Button
+                                            onClick={() => {
+                                                setShowScanner(false)
+                                                setScanResult(null)
+                                                setManualCode('')
+                                            }}
+                                            variant="outline"
+                                            className="flex-1 border-white/20 hover:bg-white/10 text-white h-12 text-base font-medium"
+                                        >
+                                            Back to Dashboard
+                                        </Button>
                                     </div>
                                 </div>
                             )}
@@ -711,8 +739,15 @@ export default function EventScannerPage() {
                                     value={manualCode}
                                     onChange={e => setManualCode(e.target.value)}
                                     className="bg-black/40 border-white/10 text-white"
+                                    disabled={!!scanResult}
                                 />
-                                <Button type="submit" className="bg-white/10 hover:bg-white/20 text-white">Check</Button>
+                                <Button
+                                    type="submit"
+                                    className="bg-white/10 hover:bg-white/20 text-white"
+                                    disabled={!!scanResult}
+                                >
+                                    Check
+                                </Button>
                             </form>
                         </div>
                     </div>

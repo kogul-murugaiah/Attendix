@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button"
 const tiers = [
     {
         name: "Starter",
-        price: "Free",
+        price: "₹0",
         description: "Perfect for small clubs and meetups.",
         features: [
-            "Up to 100 participants/month",
+            "Up to 100 participants/event",
             "1 Active Event",
             "Basic QR Scanning",
             "Email Support",
@@ -17,12 +17,27 @@ const tiers = [
         popular: false
     },
     {
+        name: "Basic",
+        price: "₹499",
+        period: "/mo",
+        description: "For regular events and workshops.",
+        features: [
+            "Up to 500 participants/event",
+            "10 Active Events",
+            "Custom Branding",
+            "Priority Email Support",
+            "Advanced Export (Excel/CSV)"
+        ],
+        cta: "Get Started",
+        popular: false
+    },
+    {
         name: "Pro",
-        price: "$29",
+        price: "₹1,499",
         period: "/mo",
         description: "For growing organizations and colleges.",
         features: [
-            "Unlimited participants",
+            "Up to 2,000 participants/event",
             "Unlimited Events",
             "Custom Branding",
             "Priority Email Support",
@@ -37,12 +52,12 @@ const tiers = [
         price: "Custom",
         description: "For large festivals and universities.",
         features: [
+            "Unlimited Participants",
+            "Unlimited Events",
             "Dedicated Server Instance",
             "SLA Guarantee",
             "Custom API Access",
-            "24/7 Phone Support",
-            "White-label Solution",
-            "On-site Assistance"
+            "24/7 Phone Support"
         ],
         cta: "Contact Sales",
         popular: false
@@ -58,13 +73,13 @@ export function Pricing() {
                     <p className="text-gray-400 text-lg">No hidden fees. Cancel anytime.</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                     {tiers.map((tier) => (
                         <div
                             key={tier.name}
                             className={`relative p-8 rounded-3xl border backdrop-blur-sm flex flex-col ${tier.popular
-                                    ? "bg-white/5 border-purple-500/50 shadow-2xl shadow-purple-500/10 scale-105 z-10"
-                                    : "bg-black/20 border-white/10"
+                                ? "bg-white/5 border-purple-500/50 shadow-2xl shadow-purple-500/10 scale-105 z-10"
+                                : "bg-black/20 border-white/10"
                                 }`}
                         >
                             {tier.popular && (
@@ -93,8 +108,8 @@ export function Pricing() {
 
                             <Button
                                 className={`w-full rounded-xl py-6 ${tier.popular
-                                        ? "bg-white text-black hover:bg-gray-200"
-                                        : "bg-white/10 hover:bg-white/20 text-white"
+                                    ? "bg-white text-black hover:bg-gray-200"
+                                    : "bg-white/10 hover:bg-white/20 text-white"
                                     }`}
                             >
                                 {tier.cta}

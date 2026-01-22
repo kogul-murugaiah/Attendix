@@ -1,0 +1,41 @@
+import Link from "next/link"
+import Image from "next/image"
+import { Button } from "@/components/ui/button"
+
+export function Navbar() {
+    return (
+        <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-black/20 backdrop-blur-md">
+            <div className="flex items-center justify-between p-4 px-6 max-w-7xl mx-auto w-full">
+                <div className="flex items-center gap-0">
+                    <div className="relative w-12 h-12">
+                        <Image
+                            src="/logo.png"
+                            alt="Attendix"
+                            fill
+                            className="object-contain"
+                            priority
+                        />
+                    </div>
+                    <span className="font-bold text-xl bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400 -ml-2">Attendix</span>
+                </div>
+
+                <nav className="hidden md:flex gap-8 text-sm font-medium text-gray-400">
+                    <a href="#features" className="hover:text-white transition-colors">Features</a>
+                    <a href="#use-cases" className="hover:text-white transition-colors">Use Cases</a>
+                    <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+                </nav>
+
+                <div className="flex gap-4">
+                    <Link href="/login">
+                        <Button variant="ghost" className="text-gray-300 hover:text-white hover:bg-white/5">Login</Button>
+                    </Link>
+                    <Link href="/register">
+                        <Button className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 border-0 rounded-full px-6 transition-all hover:shadow-lg hover:shadow-purple-500/20">
+                            Get Started
+                        </Button>
+                    </Link>
+                </div>
+            </div>
+        </header>
+    )
+}

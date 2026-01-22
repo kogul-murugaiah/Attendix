@@ -54,19 +54,36 @@ export default function ParticipantsTab() {
 
     // ... (rest of simple states)
 
-    const handleSendTicket = async (participantId: string, email: string) => {
-        setSendingEmailId(participantId)
+    const handleSendTicket = async (participant: Participant) => {
+        setSendingEmailId(participant.id)
         try {
+            // Get the first event the participant is registered for
+            const firstEvent = participant.events?.[0]
+
             const response = await fetch('/api/send-ticket', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ participantId, email })
+                body: JSON.stringify({
+                    participantId: participant.id,
+                    email: participant.email,
+                    name: participant.full_name || participant.name,
+                    eventName: firstEvent?.event_name || 'Event',
+                    participantCode: participant.qr_code || participant.participant_code,
+                    organizationName: organization?.org_name || 'Attendix',
+                    eventDateTime: null, // You can add event date if available
+                    venue: null // You can add venue if available
+                })
             })
-            if (!response.ok) throw new Error('Failed to send ticket')
+
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Failed to send ticket')
+            }
+
             toast.success('Ticket sent successfully')
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error sending ticket:', error)
-            toast.error('Failed to send ticket')
+            toast.error(error.message || 'Failed to send ticket')
         } finally {
             setSendingEmailId(null)
         }

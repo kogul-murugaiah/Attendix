@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Resend } from 'resend'
-import { generateQRCode } from '@/lib/qr-code'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
+import * as brevo from '@getbrevo/brevo'
+import QRCode from 'qrcode'
 
 export async function POST(req: NextRequest) {
     try {
@@ -13,11 +11,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
-        // Generate QR Code
-        const qrCodeDataUrl = await generateQRCode(participantCode)
+        // Generate QR Code as both data URL (for display) and buffer (for attachment)
+        const qrCodeDataUrl = await QRCode.toDataURL(participantCode)
+        const qrCodeBuffer = await QRCode.toBuffer(participantCode)
+        const qrCodeBase64 = qrCodeBuffer.toString('base64')
 
-        // Basic HTML Email Template
-        // Note: For production, consider using a proper email template library like react-email
+        // HTML Email Template - use data URL for inline display
         const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
                 <div style="background: linear-gradient(90deg, #8b5cf6, #06b6d4); padding: 20px; text-align: center;">
@@ -28,7 +27,7 @@ export async function POST(req: NextRequest) {
                     <p style="color: #666;">Here is your ticket for <strong>${eventName}</strong>.</p>
                     
                     <div style="background-color: #f9fafb; padding: 20px; margin: 20px 0; border-radius: 8px; display: inline-block;">
-                        <img src="${qrCodeDataUrl}" alt="Ticket QR Code" style="width: 200px; height: 200px;" />
+                        <img src="${qrCodeDataUrl}" alt="Ticket QR Code" style="width: 200px; height: 200px; display: block;" />
                         <p style="font-family: monospace; font-size: 18px; font-weight: bold; margin-top: 10px; color: #333;">${participantCode}</p>
                     </div>
 
@@ -41,6 +40,9 @@ export async function POST(req: NextRequest) {
                     <p style="color: #666; font-size: 14px; margin-top: 30px;">
                         Please present this QR code at the entrance for check-in.
                     </p>
+                    <p style="color: #999; font-size: 12px; margin-top: 10px;">
+                        If the QR code doesn't display, please check the attached image.
+                    </p>
                 </div>
                 <div style="background-color: #f3f4f6; padding: 15px; text-align: center; font-size: 12px; color: #999;">
                     Powered by Attendix
@@ -48,34 +50,39 @@ export async function POST(req: NextRequest) {
             </div>
         `
 
-        let data;
-        let error;
+        // Initialize Brevo API
+        const apiInstance = new brevo.TransactionalEmailsApi()
+        apiInstance.setApiKey(
+            brevo.TransactionalEmailsApiApiKeys.apiKey,
+            process.env.BREVO_API_KEY!
+        )
 
-        if (process.env.RESEND_API_KEY) {
-            const result = await resend.emails.send({
-                from: 'Attendix <onboarding@resend.dev>', // Default Resend testing domain
-                to: email,
-                subject: `Your Ticket for ${eventName}`,
-                html: htmlContent,
-            })
-            data = result.data
-            error = result.error
-        } else {
-            console.log('[Mock Email] Would have sent email to:', email);
-            console.log('[Mock Email] Subject:', `Your Ticket for ${eventName}`);
-            // Mock success response if no API key
-            data = { id: 'mock-email-id' }
+        // Prepare email with inline attachment
+        const sendSmtpEmail = new brevo.SendSmtpEmail()
+        sendSmtpEmail.subject = `Your Ticket for ${eventName}`
+        sendSmtpEmail.sender = {
+            name: organizationName || 'Attendix',
+            email: process.env.BREVO_SENDER_EMAIL || 'noreply@yourbusiness.com'
         }
+        sendSmtpEmail.to = [{ email: email, name: name || 'Participant' }]
+        sendSmtpEmail.htmlContent = htmlContent
 
-        if (error) {
-            console.error('Resend API Error:', error)
-            return NextResponse.json({ error: error.message }, { status: 500 })
-        }
+        // Attach QR code as inline image (Brevo automatically makes attachments available for CID referencing)
+        sendSmtpEmail.attachment = [{
+            content: qrCodeBase64,
+            name: 'qrcode.png',
+        }]
 
-        return NextResponse.json({ success: true, data })
+        // Send email
+        const result = await apiInstance.sendTransacEmail(sendSmtpEmail)
+
+        return NextResponse.json({ success: true, data: result })
 
     } catch (err: any) {
-        console.error('Send ticket error:', err)
-        return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 })
+        console.error('Brevo email error:', err)
+        return NextResponse.json({
+            error: err.message || 'Failed to send email',
+            details: err.response?.body || err
+        }, { status: 500 })
     }
 }

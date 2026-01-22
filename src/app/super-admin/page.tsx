@@ -2,6 +2,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { OrgTable } from "@/components/super-admin/OrgTable"
+import { UserMenu } from '@/components/super-admin/UserMenu'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, Building2, CreditCard, Activity } from "lucide-react"
 import Image from "next/image"
@@ -36,6 +37,17 @@ export default async function SuperAdminDashboard() {
         .select('*', { count: 'exact', head: true })
         .eq('subscription_status', 'active')
 
+    // Get total platform users (organization admins + staff)
+    const { count: adminCount } = await supabase
+        .from('organization_admins')
+        .select('*', { count: 'exact', head: true })
+
+    const { count: staffCount } = await supabase
+        .from('staff')
+        .select('*', { count: 'exact', head: true })
+
+    const totalUsers = (adminCount || 0) + (staffCount || 0)
+
     const { data: organizations } = await supabase
         .from('organizations')
         .select('*')
@@ -43,21 +55,38 @@ export default async function SuperAdminDashboard() {
 
     return (
         <div className="min-h-screen bg-[#0a0a0f] p-8 space-y-8">
-            <div className="space-y-2">
-                <div className="flex items-center gap-0 mb-4">
-                    <div className="relative w-20 h-20">
-                        <Image
-                            src="/logo.png"
-                            alt="Attendix"
-                            fill
-                            className="object-contain"
-                            priority
-                        />
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-white/10 pb-8">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="relative w-10 h-10">
+                            <Image
+                                src="/logo.png"
+                                alt="Attendix"
+                                fill
+                                className="object-contain"
+                                priority
+                            />
+                        </div>
+                        <span className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400">
+                            Attendix
+                        </span>
+                        <div className="px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-[10px] font-bold text-purple-400 uppercase tracking-wider">
+                            Super Admin
+                        </div>
                     </div>
-                    <span className="text-4xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400 -ml-5">Attendix</span>
+                    <h1 className="text-3xl font-bold text-white">Dashboard Overview</h1>
+                    <p className="text-gray-400 max-w-lg">
+                        Manage organizations, subscriptions, and monitor system health from a single control center.
+                    </p>
                 </div>
-                <h1 className="text-xl font-semibold text-gray-200">Super Admin Dashboard</h1>
-                <p className="text-gray-400">System overview and management.</p>
+
+                <div className="flex items-center gap-4">
+                    <div className="hidden md:block text-right">
+                        <p className="text-sm font-medium text-white">{user.email}</p>
+                        <p className="text-xs text-emerald-400">● System Online</p>
+                    </div>
+                    <UserMenu />
+                </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -87,8 +116,8 @@ export default async function SuperAdminDashboard() {
                         <Users className="h-4 w-4 text-pink-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-white">-</div>
-                        <p className="text-xs text-gray-500">Total registered accounts</p>
+                        <div className="text-2xl font-bold text-white">{totalUsers}</div>
+                        <p className="text-xs text-gray-500">Admins + Staff members</p>
                     </CardContent>
                 </Card>
                 <Card className="bg-[#13131a] border-white/10">

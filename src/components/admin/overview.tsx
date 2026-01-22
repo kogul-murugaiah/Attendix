@@ -4,7 +4,14 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useOrganization } from '@/context/organization-context'
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+
+type EventStats = {
+    id: string
+    event_name: string
+    registered: number
+    attended: number
+}
 
 export default function OverviewTab() {
     const { organization } = useOrganization()
@@ -14,7 +21,7 @@ export default function OverviewTab() {
         gateEntries: 0,
         totalEvents: 0,
     })
-    const [eventData, setEventData] = useState<any[]>([])
+    const [eventStats, setEventStats] = useState<EventStats[]>([])
 
     useEffect(() => {
         if (organization) {
@@ -41,6 +48,31 @@ export default function OverviewTab() {
                     fetchStats()
                 }
             )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'events',
+                    filter: `organization_id=eq.${organization.id}`
+                },
+                (payload) => {
+                    console.log('Overview: Event changed, refreshing stats')
+                    fetchStats()
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'event_attendance',
+                },
+                (payload) => {
+                    console.log('Overview: Attendance changed, refreshing stats')
+                    fetchStats()
+                }
+            )
             .subscribe()
 
         return () => {
@@ -51,7 +83,7 @@ export default function OverviewTab() {
     const fetchStats = async () => {
         if (!organization) return
 
-        // Parallel fetch - Query student_registrations instead of participants
+        // Fetch basic stats
         const p1 = supabase.from('student_registrations').select('id', { count: 'exact', head: true }).eq('organization_id', organization.id)
         const p2 = supabase.from('student_registrations').select('id', { count: 'exact', head: true }).eq('checked_in', true).eq('organization_id', organization.id)
         const p3 = supabase.from('events').select('*').eq('organization_id', organization.id)
@@ -64,11 +96,34 @@ export default function OverviewTab() {
             totalEvents: r3.data?.length || 0
         })
 
-        if (r3.data) {
-            setEventData(r3.data.map((e: any) => ({
-                name: e.event_name,
-                attendance: e.current_attendance
-            })))
+        // Fetch event-wise statistics
+        if (r3.data && r3.data.length > 0) {
+            const eventStatsData: EventStats[] = await Promise.all(
+                r3.data.map(async (event: any) => {
+                    // Count registrations for this event from event_registrations table
+                    const { count: registrationCount } = await supabase
+                        .from('event_registrations')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('event_id', event.id)
+
+                    // Count attendance for this event from event_registrations.attendance_status
+                    const { count: attendanceCount } = await supabase
+                        .from('event_registrations')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('event_id', event.id)
+                        .eq('attendance_status', true)
+
+                    return {
+                        id: event.id,
+                        event_name: event.event_name,
+                        registered: registrationCount || 0,
+                        attended: attendanceCount || 0
+                    }
+                })
+            )
+            setEventStats(eventStatsData)
+        } else {
+            setEventStats([])
         }
     }
 
@@ -129,64 +184,69 @@ export default function OverviewTab() {
                 </div>
             </div>
 
+            {/* Event Statistics Table */}
             <div className="relative overflow-hidden rounded-2xl p-[1px] bg-gradient-to-br from-purple-500/30 via-transparent to-cyan-500/30">
                 <div className="relative bg-[#13131a]/90 backdrop-blur-xl rounded-2xl p-8 border border-white/5">
-                    <div className="flex items-center justify-between mb-8">
-                        <div>
-                            <h2 className="text-2xl font-bold text-white mb-1">Event Attendance</h2>
-                            <p className="text-sm text-gray-400">Real-time stats across all active events</p>
-                        </div>
-                        <div className="flex gap-2 bg-white/5 rounded-xl p-1 border border-white/5">
-                            <button className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-cyan-500 text-white text-sm font-medium shadow-lg shadow-purple-900/20">Today</button>
-                            <button className="px-4 py-2 rounded-lg text-gray-400 text-sm font-medium hover:text-white hover:bg-white/5 transition-colors">Week</button>
-                        </div>
+                    <div className="mb-6">
+                        <h2 className="text-2xl font-bold text-white mb-1">Event-wise Statistics</h2>
+                        <p className="text-sm text-gray-400">Registration and attendance breakdown by event</p>
                     </div>
 
-                    <div className="h-[400px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={eventData}>
-                                <defs>
-                                    <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stopColor="#8b5cf6" stopOpacity={1} />
-                                        <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.6} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                                <XAxis
-                                    dataKey="name"
-                                    stroke="#6b7280"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fontSize: 12, fill: '#9ca3af' }}
-                                    dy={10}
-                                />
-                                <YAxis
-                                    allowDecimals={false}
-                                    stroke="#6b7280"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fontSize: 12, fill: '#9ca3af' }}
-                                />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: 'rgba(19, 19, 26, 0.9)',
-                                        borderColor: 'rgba(255,255,255,0.1)',
-                                        borderRadius: '12px',
-                                        color: '#fff',
-                                        backdropFilter: 'blur(20px)',
-                                        boxShadow: '0 10px 40px -10px rgba(0,0,0,0.5)'
-                                    }}
-                                    cursor={{ fill: 'rgba(139, 92, 246, 0.1)', radius: 4 }}
-                                />
-                                <Bar
-                                    dataKey="attendance"
-                                    fill="url(#barGradient)"
-                                    radius={[8, 8, 0, 0]}
-                                    animationDuration={1500}
-                                />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
+                    {eventStats.length === 0 ? (
+                        <div className="text-center py-12 text-gray-500">
+                            <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                            <p className="text-lg">No events created yet</p>
+                            <p className="text-sm mt-2">Create events in the Events tab to see statistics here</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="border-white/10 hover:bg-transparent">
+                                        <TableHead className="text-gray-400 font-semibold">Event Name</TableHead>
+                                        <TableHead className="text-gray-400 font-semibold text-center">Registered</TableHead>
+                                        <TableHead className="text-gray-400 font-semibold text-center">Attended</TableHead>
+                                        <TableHead className="text-gray-400 font-semibold">Progress</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {eventStats.map((event) => {
+                                        const percentage = event.registered > 0 ? (event.attended / event.registered) * 100 : 0
+                                        return (
+                                            <TableRow key={event.id} className="border-white/5 hover:bg-white/[0.02] transition-colors">
+                                                <TableCell className="font-medium text-white">{event.event_name}</TableCell>
+                                                <TableCell className="text-center">
+                                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                                        {event.registered}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-500/20 text-green-300 border border-green-500/30">
+                                                        {event.attended}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                                                            <div
+                                                                className="h-full bg-gradient-to-r from-purple-500 to-cyan-500 transition-all duration-500 rounded-full"
+                                                                style={{ width: `${Math.min(percentage, 100)}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-sm font-medium text-gray-400 w-12 text-right">
+                                                            {percentage.toFixed(0)}%
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -31,10 +31,12 @@ import {
     Filter,
     Camera,
     X,
-    Download
+    Download,
+    Upload
 } from 'lucide-react'
 import { Badge } from "@/components/ui/badge"
 import * as XLSX from 'xlsx'
+import { Html5Qrcode } from 'html5-qrcode'
 
 export default function EventScannerPage() {
     const router = useRouter()
@@ -702,34 +704,75 @@ export default function EventScannerPage() {
                                 </div>
                             )}
 
-                            <div className="relative">
+                            <div className="relative my-4">
                                 <div className="absolute inset-0 flex items-center">
                                     <span className="w-full border-t border-white/10" />
                                 </div>
                                 <div className="relative flex justify-center text-xs uppercase">
-                                    <span className="bg-[#13131a] px-2 text-gray-500">Or enter manually</span>
+                                    <span className="bg-[#13131a] px-2 text-gray-500">Or use alternative methods</span>
                                 </div>
                             </div>
 
-                            <form
-                                onSubmit={(e) => { e.preventDefault(); handleScan(manualCode); }}
-                                className="mt-4 flex gap-2"
-                            >
-                                <Input
-                                    placeholder="Enter Code..."
-                                    value={manualCode}
-                                    onChange={e => setManualCode(e.target.value)}
-                                    className="bg-black/40 border-white/10 text-white"
-                                    disabled={!!scanResult}
-                                />
-                                <Button
-                                    type="submit"
-                                    className="bg-white/10 hover:bg-white/20 text-white"
-                                    disabled={!!scanResult}
+                            <div className="flex flex-col gap-3">
+                                {/* Manual Code Entry */}
+                                <form
+                                    onSubmit={(e) => { e.preventDefault(); handleScan(manualCode); }}
+                                    className="flex gap-2"
                                 >
-                                    Check
-                                </Button>
-                            </form>
+                                    <Input
+                                        placeholder="Enter Code..."
+                                        value={manualCode}
+                                        onChange={e => setManualCode(e.target.value)}
+                                        className="bg-black/40 border-white/10 text-white"
+                                        disabled={!!scanResult}
+                                    />
+                                    <Button
+                                        type="submit"
+                                        className="bg-white/10 hover:bg-white/20 text-white"
+                                        disabled={!!scanResult}
+                                    >
+                                        Check
+                                    </Button>
+                                </form>
+
+                                {/* File Upload */}
+                                <div className="relative">
+                                    <Input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        id="qr-image-upload"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0]
+                                            if (!file) return
+
+                                            setProcessing(true)
+                                            try {
+                                                const html5QrCode = new Html5Qrcode("qr-file-reader-hidden")
+                                                const decodedText = await html5QrCode.scanFile(file, true)
+                                                await handleScan(decodedText)
+                                            } catch (err) {
+                                                console.error("File scan error", err)
+                                                setScanResult({ status: 'error', message: 'Could not read QR from image' })
+                                                setProcessing(false)
+                                            }
+                                        }}
+                                        disabled={!!scanResult}
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        className="w-full border-dashed border-white/20 hover:bg-white/5 hover:border-purple-500/50 text-gray-400 hover:text-purple-400 group"
+                                        onClick={() => document.getElementById('qr-image-upload')?.click()}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Upload className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                            <span>Upload QR Image</span>
+                                        </div>
+                                    </Button>
+                                    {/* Hidden div for file reader instance requirement */}
+                                    <div id="qr-file-reader-hidden" className="hidden"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

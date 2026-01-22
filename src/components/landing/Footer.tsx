@@ -1,5 +1,6 @@
 import Link from "next/link"
 import Image from "next/image"
+import { ContactModal } from "@/components/landing/ContactModal"
 
 export function Footer() {
     return (
@@ -38,7 +39,11 @@ export function Footer() {
                         <ul className="space-y-2 text-sm text-gray-400">
                             <li><a href="#" className="hover:text-purple-400 transition-colors">Documentation</a></li>
                             <li><a href="#" className="hover:text-purple-400 transition-colors">API Reference</a></li>
-                            <li><a href="#" className="hover:text-purple-400 transition-colors">Status</a></li>
+                            <li>
+                                <ContactModal subject="General Inquiry" className="hover:text-purple-400 transition-colors cursor-pointer" asChild>
+                                    <span className="hover:text-purple-400 transition-colors cursor-pointer">Contact Support</span>
+                                </ContactModal>
+                            </li>
                         </ul>
                     </div>
 

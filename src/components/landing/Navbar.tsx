@@ -1,6 +1,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
+import { ContactModal } from "@/components/landing/ContactModal"
 
 export function Navbar() {
     return (
@@ -23,6 +24,9 @@ export function Navbar() {
                     <a href="#features" className="hover:text-white transition-colors">Features</a>
                     <a href="#use-cases" className="hover:text-white transition-colors">Use Cases</a>
                     <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+                    <ContactModal subject="Support Request" className="hover:text-white transition-colors cursor-pointer" asChild>
+                        <span className="hover:text-white transition-colors cursor-pointer">Support</span>
+                    </ContactModal>
                 </nav>
 
                 <div className="flex gap-4">

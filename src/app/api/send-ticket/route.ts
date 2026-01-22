@@ -16,36 +16,54 @@ export async function POST(req: NextRequest) {
         const qrCodeBuffer = await QRCode.toBuffer(participantCode)
         const qrCodeBase64 = qrCodeBuffer.toString('base64')
 
-        // HTML Email Template - use data URL for inline display
+        // Handle event display logic
+        let displayEventText = eventName
+        let isMultipleEvents = false
+
+        if (Array.isArray(eventName)) {
+            isMultipleEvents = eventName.length > 1
+            displayEventText = eventName.join(', ')
+        } else if (typeof eventName === 'string') {
+            isMultipleEvents = eventName.includes(',') || eventName.includes('Multiple')
+            displayEventText = eventName
+        }
+
+        // HTML Email Template - Cleaned up and customized
         const htmlContent = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-                <div style="background: linear-gradient(90deg, #8b5cf6, #06b6d4); padding: 20px; text-align: center;">
-                    <h1 style="color: white; margin: 0;">${organizationName || 'Event Ticket'}</h1>
+            <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+                <div style="background: linear-gradient(135deg, #7c3aed, #0891b2); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0.5px;">${organizationName || 'Event Ticket'}</h1>
+                    <p style="color: rgba(255,255,255,0.9); margin-top: 10px; font-size: 14px;">Registration Confirmed</p>
                 </div>
-                <div style="padding: 30px; text-align: center;">
-                    <h2 style="color: #333;">Hello ${name || 'Participant'},</h2>
-                    <p style="color: #666;">Here is your ticket for <strong>${eventName}</strong>.</p>
+                
+                <div style="padding: 40px 30px; text-align: center;">
+                    <h2 style="color: #1f2937; font-size: 20px; marginBottom: 10px;">Hello ${name || 'Participant'},</h2>
+                    <p style="color: #4b5563; line-height: 1.6;">
+                        This is your official ticket for your registration with <strong>${organizationName}</strong>.
+                    </p>
                     
-                    <div style="background-color: #f9fafb; padding: 20px; margin: 20px 0; border-radius: 8px; display: inline-block;">
-                        <img src="${qrCodeDataUrl}" alt="Ticket QR Code" style="width: 200px; height: 200px; display: block;" />
-                        <p style="font-family: monospace; font-size: 18px; font-weight: bold; margin-top: 10px; color: #333;">${participantCode}</p>
-                    </div>
-
-                    <div style="text-align: left; margin-top: 20px; color: #555;">
-                        <p><strong>Event:</strong> ${eventName}</p>
-                        <p><strong>Date:</strong> ${eventDateTime ? new Date(eventDateTime).toLocaleString() : 'TBA'}</p>
-                        <p><strong>Venue:</strong> ${venue || 'TBA'}</p>
-                    </div>
-
-                    <p style="color: #666; font-size: 14px; margin-top: 30px;">
-                        Please present this QR code at the entrance for check-in.
+                    <p style="color: #4b5563; margin-top: 5px;">
+                        Thank you for registering! We are excited to have you join us.
                     </p>
-                    <p style="color: #999; font-size: 12px; margin-top: 10px;">
-                        If the QR code doesn't display, please check the attached image.
+
+                    <div style="margin: 30px 0; padding: 20px; background: #f3f4f6; border-radius: 12px; display: inline-block;">
+                        <p style="margin: 0; color: #374151; font-weight: 600;">Ticket Code:</p>
+                        <p style="margin: 5px 0 0 0; font-family: monospace; font-size: 24px; font-weight: 700; color: #7c3aed; letter-spacing: 2px;">
+                            ${participantCode}
+                        </p>
+                    </div>
+
+                    <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+                        <strong>Note:</strong> Your QR Code ticket is attached to this email. 
+                        <br>
+                        Please download and present it at the entrance for check-in.
                     </p>
                 </div>
-                <div style="background-color: #f3f4f6; padding: 15px; text-align: center; font-size: 12px; color: #999;">
-                    Powered by Attendix
+                
+                <div style="background-color: #f9fafb; padding: 20px; text-align: center;">
+                    <p style="margin: 0; font-size: 12px; color: #9ca3af;">
+                        Powered by <strong style="color: #7c3aed;">Attendix</strong>
+                    </p>
                 </div>
             </div>
         `
@@ -59,7 +77,7 @@ export async function POST(req: NextRequest) {
 
         // Prepare email with inline attachment
         const sendSmtpEmail = new brevo.SendSmtpEmail()
-        sendSmtpEmail.subject = `Your Ticket for ${eventName}`
+        sendSmtpEmail.subject = `Your Ticket for ${organizationName}`
         sendSmtpEmail.sender = {
             name: organizationName || 'Attendix',
             email: process.env.BREVO_SENDER_EMAIL || 'noreply@yourbusiness.com'
@@ -67,10 +85,11 @@ export async function POST(req: NextRequest) {
         sendSmtpEmail.to = [{ email: email, name: name || 'Participant' }]
         sendSmtpEmail.htmlContent = htmlContent
 
-        // Attach QR code as inline image (Brevo automatically makes attachments available for CID referencing)
+        // Attach QR code with dynamic name
+        const sanitizedName = (name || 'ticket').replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_');
         sendSmtpEmail.attachment = [{
             content: qrCodeBase64,
-            name: 'qrcode.png',
+            name: `${sanitizedName}.png`,
         }]
 
         // Send email

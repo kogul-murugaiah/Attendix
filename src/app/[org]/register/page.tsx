@@ -45,6 +45,31 @@ export default function RegistrationPage() {
         setLoading(true);
 
         try {
+            // Check if registration is open
+            const { data: orgData, error: orgError } = await supabase
+                .from('organizations')
+                .select('registration_open, logo_url')
+                .eq('id', organization.id)
+                .single();
+
+            if (orgError) {
+                console.error("Organization fetch error", orgError);
+                toast.error("Failed to load organization details.");
+                setLoading(false);
+                return;
+            }
+
+            // If registration is closed, stop here
+            if (!orgData.registration_open) {
+                if (orgData.logo_url) {
+                    setLogoUrl(orgData.logo_url);
+                } else if (organization.logo_url) {
+                    setLogoUrl(organization.logo_url);
+                }
+                setLoading(false);
+                return;
+            }
+
             const { data: form, error: formError } = await supabase
                 .from('registration_forms')
                 .select('id, name, description')
@@ -61,12 +86,6 @@ export default function RegistrationPage() {
 
             setFormId(form.id);
             setFormDetails({ name: form.name, description: form.description });
-
-            const { data: orgData } = await supabase
-                .from('organizations')
-                .select('logo_url')
-                .eq('id', organization.id)
-                .single();
 
             if (orgData?.logo_url) {
                 setLogoUrl(orgData.logo_url);
@@ -207,6 +226,28 @@ export default function RegistrationPage() {
                     supabase.removeChannel(channel)
                 }
             })
+
+            // Trigger Email Sending
+            if (coreData.email) {
+                try {
+                    await fetch('/api/send-ticket', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            participantId: insertedData.id,
+                            email: coreData.email,
+                            name: coreData.full_name,
+                            eventName: selectedEvents.join(', '), // Send raw list for logging if needed, template ignores it now
+                            participantCode: insertedData.qr_code,
+                            organizationName: organization.org_name,
+                            // No date/venue needed for generic ticket
+                        })
+                    });
+                } catch (emailErr) {
+                    console.error("Failed to trigger email", emailErr);
+                    // Don't block success UI if email fails
+                }
+            }
 
             setSuccess(true);
             toast.success("Registration Successful!");
@@ -357,6 +398,47 @@ export default function RegistrationPage() {
             </div>
         </div>
     );
+
+    // Check if registration is closed
+    if (!loading && organization && !formId) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#0a0118] relative overflow-hidden">
+                {/* Subtle background gradient */}
+                <div className="absolute inset-0">
+                    <div className="absolute top-20 right-10 w-96 h-96 bg-purple-600/10 rounded-full blur-[100px]" />
+                    <div className="absolute bottom-20 left-10 w-96 h-96 bg-cyan-600/10 rounded-full blur-[100px]" />
+                </div>
+
+                <Card className="w-full max-w-md bg-[#1a0f2e]/80 backdrop-blur-xl border border-purple-500/30 relative z-10 shadow-2xl rounded-2xl">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 via-orange-600 to-red-600" />
+
+                    <CardHeader className="text-center pb-4 pt-8">
+                        {logoUrl && (
+                            <div className="mx-auto mb-6">
+                                <img src={logoUrl} alt="Logo" className="h-24 w-auto mx-auto object-contain" />
+                            </div>
+                        )}
+                        <CardTitle className="text-2xl font-bold mb-2">
+                            <span className="bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-orange-400">
+                                Registration Closed
+                            </span>
+                        </CardTitle>
+                        <CardDescription className="text-gray-400">
+                            {organization.org_name}
+                        </CardDescription>
+                    </CardHeader>
+
+                    <CardContent className="space-y-6 pb-8">
+                        <div className="relative bg-[#0a0118]/50 rounded-xl border border-red-500/30 p-6">
+                            <p className="text-gray-300 text-center leading-relaxed">
+                                Registration is currently closed. Please contact organisers for further updates.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
 
     if (success) {
         return (

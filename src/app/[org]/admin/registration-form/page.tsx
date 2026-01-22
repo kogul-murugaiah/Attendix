@@ -452,6 +452,50 @@ export default function RegistrationFormPage() {
                             </Button>
                         </div>
                     </div>
+
+                    {/* Registration Status Toggle */}
+                    <div className="bg-gradient-to-r from-purple-500/10 to-cyan-500/10 border border-purple-500/20 rounded-2xl p-6">
+                        <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                    Registration Status
+                                    <span className={`ml-2 px-3 py-1 rounded-full text-xs font-medium ${organization?.registration_open ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+                                        {organization?.registration_open ? '● OPEN' : '● CLOSED'}
+                                    </span>
+                                </h3>
+                                <p className="text-gray-400 text-sm mt-1">
+                                    {organization?.registration_open
+                                        ? 'Students can currently register for events'
+                                        : 'Registration is closed. Students will see a message to contact organisers.'}
+                                </p>
+                            </div>
+                            <button
+                                onClick={async () => {
+                                    if (!organization) return;
+                                    const newStatus = !organization.registration_open;
+
+                                    const { error } = await supabase
+                                        .from('organizations')
+                                        .update({ registration_open: newStatus })
+                                        .eq('id', organization.id);
+
+                                    if (error) {
+                                        toast.error('Failed to update registration status');
+                                    } else {
+                                        toast.success(`Registration ${newStatus ? 'opened' : 'closed'}`);
+                                        await refresh();
+                                    }
+                                }}
+                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${organization?.registration_open ? 'bg-green-500' : 'bg-gray-600'
+                                    }`}
+                            >
+                                <span
+                                    className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform ${organization?.registration_open ? 'translate-x-7' : 'translate-x-1'
+                                        }`}
+                                />
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Share URL Section */}

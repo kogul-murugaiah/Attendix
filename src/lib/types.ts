@@ -17,6 +17,7 @@ export type Organization = {
     max_participants_per_event: number
     max_staff: number
     features?: Record<string, boolean> | null
+    registration_open: boolean
     created_at: string
 }
 

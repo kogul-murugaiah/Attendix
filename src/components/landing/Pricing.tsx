@@ -1,5 +1,7 @@
 import { Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { ContactModal } from "@/components/landing/ContactModal"
 
 const tiers = [
     {
@@ -106,14 +108,29 @@ export function Pricing() {
                                 ))}
                             </ul>
 
-                            <Button
-                                className={`w-full rounded-xl py-6 ${tier.popular
-                                    ? "bg-white text-black hover:bg-gray-200"
-                                    : "bg-white/10 hover:bg-white/20 text-white"
-                                    }`}
-                            >
-                                {tier.cta}
-                            </Button>
+                            {tier.name === "Enterprise" ? (
+                                <ContactModal subject="Enterprise Inquiry" className="w-full" asChild>
+                                    <Button
+                                        className={`w-full rounded-xl py-6 ${tier.popular
+                                            ? "bg-white text-black hover:bg-gray-200"
+                                            : "bg-white/10 hover:bg-white/20 text-white"
+                                            }`}
+                                    >
+                                        {tier.cta}
+                                    </Button>
+                                </ContactModal>
+                            ) : (
+                                <Link href="/register" className="w-full">
+                                    <Button
+                                        className={`w-full rounded-xl py-6 ${tier.popular
+                                            ? "bg-white text-black hover:bg-gray-200"
+                                            : "bg-white/10 hover:bg-white/20 text-white"
+                                            }`}
+                                    >
+                                        {tier.cta}
+                                    </Button>
+                                </Link>
+                            )}
                         </div>
                     ))}
                 </div>

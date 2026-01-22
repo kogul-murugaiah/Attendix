@@ -11,11 +11,6 @@ export function Hero() {
 
             {/* Content */}
             <div className="z-10 max-w-4xl space-y-8 animate-in fade-in zoom-in duration-1000 slide-in-from-bottom-10">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-purple-300 mb-4 backdrop-blur-sm">
-                    <Sparkles className="w-3 h-3" />
-                    <span>New: AI-Powered Analytics 2.0</span>
-                </div>
-
                 <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-tight">
                     Event Management, <br />
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-cyan-400 to-emerald-400 animate-gradient-x">

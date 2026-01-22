@@ -1,68 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as brevo from '@getbrevo/brevo'
 import QRCode from 'qrcode'
+import { createAdminClient } from '@/lib/supabase/admin'
+
+const DEFAULT_EMAIL_TEMPLATE = `Dear {name},
+
+Thank you for registering with {org_name}! We are excited to have you join us. 
+
+Your unique participant code is:
+{code_box}
+
+Please find your QR code ticket attached to this email. Present it at the venue for entry.
+
+See you at the event!`;
 
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json()
-        const { participantId, email, name, eventName, participantCode, organizationName, eventDateTime, venue } = body
+        const { participantId, email, name, eventName, participantCode, organizationName, organizationId } = body
 
         if (!email || !participantCode) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
-        // Generate QR Code as both data URL (for display) and buffer (for attachment)
-        const qrCodeDataUrl = await QRCode.toDataURL(participantCode)
+        // Fetch organization's custom template if organizationId is provided
+        let emailBody = DEFAULT_EMAIL_TEMPLATE;
+        if (organizationId) {
+            const supabase = createAdminClient();
+            const { data: org } = await supabase
+                .from('organizations')
+                .select('email_template')
+                .eq('id', organizationId)
+                .single();
+
+            if (org?.email_template) {
+                emailBody = org.email_template;
+            }
+        }
+
+        // Styled Ticket Code Box HTML
+        const ticketBoxHTML = `
+            <div style="margin: 20px 0; text-align: center;">
+                <div style="padding: 15px 25px; background: #1a1a24; border-radius: 12px; display: inline-block; border: 1px solid #7c3aed40; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                    <p style="margin: 0; color: #9ca3af; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 2px;">Ticket Code</p>
+                    <p style="margin: 5px 0 0 0; font-family: 'Courier New', monospace; font-size: 24px; font-weight: 700; color: #a78bfa; letter-spacing: 3px;">
+                        ${participantCode}
+                    </p>
+                </div>
+            </div>
+        `;
+
+        // Replace template variables
+        let formattedBody = emailBody
+            .replace(/\{name\}/g, name || 'Participant')
+            .replace(/\{org_name\}/g, organizationName || 'Event');
+
+        // Handle {code_box} specifically
+        if (formattedBody.includes('{code_box}')) {
+            formattedBody = formattedBody.replace(/\{code_box\}/g, ticketBoxHTML);
+        } else {
+            // Fallback: append box at end if placeholder is missing, but before closing
+            formattedBody = formattedBody + '\n\n' + ticketBoxHTML;
+        }
+
+        // Also allow raw {code} if they just want the text
+        formattedBody = formattedBody.replace(/\{code\}/g, participantCode);
+
+        // Generate QR Code as buffer (for attachment)
         const qrCodeBuffer = await QRCode.toBuffer(participantCode)
         const qrCodeBase64 = qrCodeBuffer.toString('base64')
 
-        // Handle event display logic
-        let displayEventText = eventName
-        let isMultipleEvents = false
-
-        if (Array.isArray(eventName)) {
-            isMultipleEvents = eventName.length > 1
-            displayEventText = eventName.join(', ')
-        } else if (typeof eventName === 'string') {
-            isMultipleEvents = eventName.includes(',') || eventName.includes('Multiple')
-            displayEventText = eventName
-        }
-
-        // HTML Email Template - Cleaned up and customized
+        // HTML Email Template - Wraps the custom body in a professional container
         const htmlContent = `
-            <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
-                <div style="background: linear-gradient(135deg, #7c3aed, #0891b2); padding: 30px; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0.5px;">${organizationName || 'Event Ticket'}</h1>
-                    <p style="color: rgba(255,255,255,0.9); margin-top: 10px; font-size: 14px;">Registration Confirmed</p>
+            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #f0f0f0; border-radius: 16px; overflow: hidden; background-color: #ffffff; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+                <div style="background: linear-gradient(135deg, #7c3aed, #0891b2); padding: 40px 20px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">${organizationName || 'Event Ticket'}</h1>
+                    <div style="display: inline-block; margin-top: 15px; padding: 6px 16px; background: rgba(255,255,255,0.15); border-radius: 100px; color: white; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; backdrop-filter: blur(4px);">Registration Confirmed</div>
                 </div>
                 
-                <div style="padding: 40px 30px; text-align: center;">
-                    <h2 style="color: #1f2937; font-size: 20px; marginBottom: 10px;">Hello ${name || 'Participant'},</h2>
-                    <p style="color: #4b5563; line-height: 1.6;">
-                        This is your official ticket for your registration with <strong>${organizationName}</strong>.
-                    </p>
-                    
-                    <p style="color: #4b5563; margin-top: 5px;">
-                        Thank you for registering! We are excited to have you join us.
-                    </p>
+                <div style="padding: 40px; background-color: #ffffff;">
+                    <!-- Email Content Area -->
+                    <div style="color: #374151; line-height: 1.8; font-size: 16px; white-space: pre-wrap;">${formattedBody}</div>
 
-                    <div style="margin: 30px 0; padding: 20px; background: #f3f4f6; border-radius: 12px; display: inline-block;">
-                        <p style="margin: 0; color: #374151; font-weight: 600;">Ticket Code:</p>
-                        <p style="margin: 5px 0 0 0; font-family: monospace; font-size: 24px; font-weight: 700; color: #7c3aed; letter-spacing: 2px;">
-                            ${participantCode}
-                        </p>
+                    <!-- Professional Footer/Closing -->
+                    <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #f3f4f6;">
+                        <p style="margin: 0; font-size: 14px; color: #6b7280; font-weight: 500;">Best regards,</p>
+                        <p style="margin: 4px 0 0 0; font-size: 18px; color: #7c3aed; font-weight: 800;">${organizationName} Team</p>
                     </div>
 
-                    <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
-                        <strong>Note:</strong> Your QR Code ticket is attached to this email. 
-                        <br>
-                        Please download and present it at the entrance for check-in.
-                    </p>
+                    <div style="margin-top: 30px; padding: 15px; background-color: #f9fafb; border-radius: 12px; border-left: 4px solid #7c3aed;">
+                        <p style="margin: 0; font-size: 12px; color: #6b7280; line-height: 1.5;">
+                            <strong>Note:</strong> Your unique QR ticket is attached to this email. Please download it and keep it ready for scanning at the entrance.
+                        </p>
+                    </div>
                 </div>
                 
-                <div style="background-color: #f9fafb; padding: 20px; text-align: center;">
-                    <p style="margin: 0; font-size: 12px; color: #9ca3af;">
-                        Powered by <strong style="color: #7c3aed;">Attendix</strong>
+                <div style="background-color: #f3f4f6; padding: 25px; text-align: center;">
+                    <p style="margin: 0; font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">
+                        Powered by <a href="#" style="color: #7c3aed; text-decoration: none;">Attendix</a>
                     </p>
                 </div>
             </div>

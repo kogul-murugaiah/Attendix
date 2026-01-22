@@ -18,6 +18,7 @@ export type Organization = {
     max_staff: number
     features?: Record<string, boolean> | null
     registration_open: boolean
+    email_template?: string | null
     created_at: string
 }
 

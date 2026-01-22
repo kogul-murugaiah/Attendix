@@ -13,6 +13,7 @@ import StaffManager from "@/components/admin/staff-manager"
 import AttendanceManager from "@/components/admin/attendance-manager"
 import ScanLogsTab from "@/components/admin/scan-logs"
 import RegistrationFormPage from "../registration-form/page"
+import EmailSettings from "@/components/admin/email-settings"
 
 export default function AdminDashboard() {
     const router = useRouter()
@@ -88,7 +89,7 @@ export default function AdminDashboard() {
                             {/* Navigation Tabs - Desktop */}
                             <div className="hidden md:block">
                                 <TabsList className="bg-white/5 border border-white/5 p-1.5 rounded-full backdrop-blur-lg flex gap-1">
-                                    {['overview', 'participants', 'events', 'attendance', 'forms', 'staff', 'logs'].map((tab) => (
+                                    {['overview', 'participants', 'events', 'attendance', 'forms', 'emails', 'staff', 'logs'].map((tab) => (
                                         <TabsTrigger
                                             key={tab}
                                             value={tab}
@@ -118,7 +119,7 @@ export default function AdminDashboard() {
                         {/* Mobile Tabs */}
                         <div className="md:hidden px-4 pb-4 overflow-x-auto scrollbar-hide">
                             <TabsList className="bg-white/5 border border-white/5 p-1 rounded-full backdrop-blur-lg inline-flex w-full min-w-max">
-                                {['overview', 'participants', 'events', 'attendance', 'forms', 'staff', 'logs'].map((tab) => (
+                                {['overview', 'participants', 'events', 'attendance', 'forms', 'emails', 'staff', 'logs'].map((tab) => (
                                     <TabsTrigger
                                         key={tab}
                                         value={tab}
@@ -149,6 +150,9 @@ export default function AdminDashboard() {
                         <TabsContent value="forms" className="mt-0 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
                             {/* Render the full page component inside the tab, simplified */}
                             <RegistrationFormPage />
+                        </TabsContent>
+                        <TabsContent value="emails" className="mt-0 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
+                            <EmailSettings />
                         </TabsContent>
                         <TabsContent value="staff" className="mt-0 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
                             <StaffManager />

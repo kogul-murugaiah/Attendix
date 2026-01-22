@@ -240,6 +240,7 @@ export default function RegistrationPage() {
                             eventName: selectedEvents.join(', '), // Send raw list for logging if needed, template ignores it now
                             participantCode: insertedData.qr_code,
                             organizationName: organization.org_name,
+                            organizationId: organization.id,
                             // No date/venue needed for generic ticket
                         })
                     });

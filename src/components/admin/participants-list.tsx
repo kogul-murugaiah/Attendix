@@ -19,7 +19,7 @@ import { FormField } from '@/lib/types/registration'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Pencil, FileSpreadsheet, Mail } from 'lucide-react'
+import { Pencil, FileSpreadsheet, Mail, Trash2 } from 'lucide-react'
 import { Badge } from "@/components/ui/badge"
 import * as XLSX from 'xlsx'
 
@@ -38,6 +38,9 @@ export default function ParticipantsTab() {
     const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null)
     const [editOpen, setEditOpen] = useState(false)
     const [sendingEmailId, setSendingEmailId] = useState<string | null>(null)
+    const [deletingId, setDeletingId] = useState<string | null>(null)
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+    const [participantToDelete, setParticipantToDelete] = useState<Participant | null>(null)
     const [editFormData, setEditFormData] = useState({
         name: '',
         email: '',
@@ -70,6 +73,7 @@ export default function ParticipantsTab() {
                     eventName: firstEvent?.event_name || 'Event',
                     participantCode: participant.qr_code || participant.participant_code,
                     organizationName: organization?.org_name || 'Attendix',
+                    organizationId: organization?.id,
                     eventDateTime: null, // You can add event date if available
                     venue: null // You can add venue if available
                 })
@@ -135,6 +139,41 @@ export default function ParticipantsTab() {
             setCustomFields(displayFields)
         }
 
+    }
+
+    const handleDeleteParticipant = async () => {
+        if (!participantToDelete || !organization) return
+        setLoading(true)
+        setDeletingId(participantToDelete.id)
+
+        try {
+            // 1. Delete event_attendance (if any)
+            await supabase.from('event_attendance').delete().eq('participant_id', participantToDelete.id)
+
+            // 2. Delete event_registrations
+            await supabase.from('event_registrations').delete().eq('participant_id', participantToDelete.id)
+
+            // 3. Delete student_registrations
+            const { error } = await supabase
+                .from('student_registrations')
+                .delete()
+                .eq('id', participantToDelete.id)
+
+            if (error) {
+                toast.error('Failed to delete participant: ' + error.message)
+            } else {
+                toast.success('Participant deleted successfully')
+                setParticipants(participants.filter(p => p.id !== participantToDelete.id))
+                setDeleteConfirmOpen(false)
+                setParticipantToDelete(null)
+            }
+        } catch (error: any) {
+            console.error('Error deleting participant:', error)
+            toast.error('An error occurred while deleting')
+        } finally {
+            setLoading(false)
+            setDeletingId(null)
+        }
     }
 
     const fetchParticipants = async () => {
@@ -486,6 +525,22 @@ export default function ParticipantsTab() {
                                             <Button variant="ghost" size="icon" onClick={() => handleEditClick(participant)} className="text-gray-400 hover:text-white hover:bg-white/10 rounded-lg">
                                                 <Pencil className="h-4 w-4" />
                                             </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => {
+                                                    setParticipantToDelete(participant)
+                                                    setDeleteConfirmOpen(true)
+                                                }}
+                                                className="text-red-400 hover:text-white hover:bg-red-500/10 rounded-lg"
+                                                title="Delete Participant"
+                                            >
+                                                {deletingId === participant.id ? (
+                                                    <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                ) : (
+                                                    <Trash2 className="h-4 w-4" />
+                                                )}
+                                            </Button>
                                         </div>
                                     </TableCell>
                                 </TableRow>
@@ -581,6 +636,37 @@ export default function ParticipantsTab() {
                             Update Participant
                         </Button>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                <DialogContent className="bg-[#13131a]/95 backdrop-blur-xl border border-white/10 text-white sm:max-w-[400px] shadow-2xl shadow-red-900/20">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold text-red-400">Confirm Deletion</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-4">
+                        <p className="text-gray-300 text-sm leading-relaxed">
+                            Are you sure you want to delete <span className="font-bold text-white">{participantToDelete?.full_name || participantToDelete?.name}</span>?
+                            This action cannot be undone and will remove all their registration and attendance data.
+                        </p>
+                        <div className="flex gap-3 pt-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => setDeleteConfirmOpen(false)}
+                                className="flex-1 bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white rounded-xl"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleDeleteParticipant}
+                                disabled={loading}
+                                className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl shadow-lg shadow-red-900/20"
+                            >
+                                {loading ? 'Deleting...' : 'Delete'}
+                            </Button>
+                        </div>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

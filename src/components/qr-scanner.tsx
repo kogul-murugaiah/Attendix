@@ -52,9 +52,28 @@ export default function QRScanner({ onScan, onError }: QRScannerProps) {
         return () => {
             clearTimeout(timeoutId)
             if (scannerRef.current) {
-                scannerRef.current.stop().catch(() => { }).finally(() => {
-                    scannerRef.current?.clear()
-                })
+                // Only try to stop if scanner is actually running
+                if (scannerRef.current.isScanning) {
+                    scannerRef.current.stop()
+                        .catch((err) => {
+                            // Silently handle stop errors - they're usually harmless
+                            console.debug('Scanner stop error (harmless):', err)
+                        })
+                        .finally(() => {
+                            try {
+                                scannerRef.current?.clear()
+                            } catch (e) {
+                                // Ignore clear errors
+                            }
+                        })
+                } else {
+                    // If not scanning, just clear
+                    try {
+                        scannerRef.current.clear()
+                    } catch (e) {
+                        // Ignore clear errors
+                    }
+                }
             }
         }
     }, [onScan, onError])

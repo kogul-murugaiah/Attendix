@@ -397,6 +397,12 @@ export default function EventScannerPage() {
             setScanResult({ status: 'error', message: 'Unexpected Error' })
         } finally {
             setProcessing(false)
+
+            // Auto-clear result after 3 seconds for continuous scanning
+            setTimeout(() => {
+                setScanResult(null)
+                setManualCode('')
+            }, 3000)
         }
     }
 
@@ -679,7 +685,7 @@ export default function EventScannerPage() {
                                     ? 'bg-green-500/10 border-green-500/30'
                                     : 'bg-red-500/10 border-red-500/30'
                                     }`}>
-                                    <div className="flex items-center gap-3 mb-4">
+                                    <div className="flex items-center gap-3">
                                         {scanResult.status === 'success' ? <CheckCircle className="w-8 h-8 text-green-400" /> : <XCircle className="w-8 h-8 text-red-400" />}
                                         <div className="flex-1">
                                             <p className={`font-bold text-xl ${scanResult.status === 'success' ? 'text-green-400' : 'text-red-400'}`}>
@@ -692,31 +698,6 @@ export default function EventScannerPage() {
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
-
-                                    {/* Action Buttons */}
-                                    <div className="flex gap-3 mt-4">
-                                        <Button
-                                            onClick={() => {
-                                                setScanResult(null)
-                                                setManualCode('')
-                                            }}
-                                            className="flex-1 bg-purple-600 hover:bg-purple-500 text-white h-12 text-base font-medium"
-                                        >
-                                            <Camera className="w-5 h-5 mr-2" />
-                                            Continue Scanning
-                                        </Button>
-                                        <Button
-                                            onClick={() => {
-                                                setShowScanner(false)
-                                                setScanResult(null)
-                                                setManualCode('')
-                                            }}
-                                            variant="outline"
-                                            className="flex-1 border-white/20 hover:bg-white/10 text-white h-12 text-base font-medium"
-                                        >
-                                            Back to Dashboard
-                                        </Button>
                                     </div>
                                 </div>
                             )}

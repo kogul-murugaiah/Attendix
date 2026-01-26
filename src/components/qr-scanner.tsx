@@ -60,8 +60,8 @@ export default function QRScanner({ onScan, onError }: QRScannerProps) {
             } catch (err) {
                 // Suppress "already under transition" if it happens during rapid hot-reloads
                 const msg = (err as any)?.message || ""
-                if (msg.includes("already under transition")) {
-                    console.log("Scanner retry suppressed (transitioning)")
+                if (msg.includes("already under transition") || msg.includes("interrupted") || (err as any)?.name === 'AbortError') {
+                    console.log("Scanner start interrupted (benign)")
                     return
                 }
                 console.error("Failed to start scanner", err)

@@ -161,7 +161,7 @@ export default function ReceptionDashboard() {
                 full_name: r.full_name,
                 email: r.email,
                 phone: r.phone,
-                participant_code: r.participant_code || r.qr_code,
+                participant_code: r.qr_code,
                 register_number: r.register_number,
                 organization_id: r.organization_id,
                 gate_entry_status: r.checked_in,
@@ -277,14 +277,14 @@ export default function ReceptionDashboard() {
         setScanResult(null)
 
         try {
-            // 1. Find Participant by QR Code (checked against qr_code column now)
-            // Note: student_registrations uses 'qr_code' column for the unique code usually
+            const cleanCode = code.trim()
+
             const { data: userData, error } = await supabase
                 .from('student_registrations')
                 .select('*')
-                .eq('qr_code', code)
                 .eq('organization_id', organizationId)
-                .single()
+                .ilike('qr_code', cleanCode)
+                .maybeSingle()
 
             if (error || !userData) {
                 setScanResult({ status: 'error', message: 'Invalid QR Code' })
@@ -295,23 +295,21 @@ export default function ReceptionDashboard() {
             const participant: Participant = {
                 id: userData.id,
                 name: userData.full_name,
-                full_name: userData.full_name, // Also add full_name to be safe if type requires it
+                full_name: userData.full_name,
                 email: userData.email,
                 participant_code: userData.qr_code,
                 gate_entry_status: userData.checked_in,
                 organization_id: userData.organization_id,
                 created_at: userData.created_at,
-                events: [] // Default empty array
+                events: []
             }
 
-            // 2. Check Status
             if (participant.gate_entry_status) {
                 setScanResult({ status: 'error', message: 'Already Checked In', participant })
                 await logScan(participant.id, 'gate_entry', 'already_scanned')
                 return
             }
 
-            // 3. Check In
             await supabase
                 .from('student_registrations')
                 .update({
@@ -327,6 +325,25 @@ export default function ReceptionDashboard() {
 
         } catch (err) {
             setScanResult({ status: 'error', message: 'System Error' })
+        } finally {
+            setProcessing(false)
+        }
+    }
+
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file || !organizationId) return
+
+        setProcessing(true)
+        try {
+            const html5QrCode = new Html5Qrcode("reader-placeholder") // Dummy ID or create instance
+            const result = await html5QrCode.scanFile(file, true)
+            if (result) {
+                await handleScan(result)
+            }
+        } catch (err) {
+            console.error("File Scan Error:", err)
+            toast.error("Could not find QR Code in image")
         } finally {
             setProcessing(false)
         }
@@ -616,68 +633,24 @@ export default function ReceptionDashboard() {
                                 </div>
                             )}
 
-                            <div className="relative my-4">
-                                <div className="absolute inset-0 flex items-center">
-                                    <span className="w-full border-t border-white/10" />
-                                </div>
-                                <div className="relative flex justify-center text-xs uppercase">
-                                    <span className="bg-[#13131a] px-2 text-gray-500">Or use alternative methods</span>
-                                </div>
-                            </div>
-
-                            <div className="flex flex-col gap-3">
-                                {/* Manual Code Entry */}
-                                <form
-                                    onSubmit={(e) => { e.preventDefault(); handleScan(manualCode); }}
-                                    className="flex gap-2"
+                            <div id="reader-placeholder" className="hidden"></div>
+                            <div className="space-y-4">
+                                <Button
+                                    onClick={() => document.getElementById('qr-upload')?.click()}
+                                    variant="outline"
+                                    className="w-full border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-xl h-12 flex items-center justify-center gap-2"
+                                    disabled={processing}
                                 >
-                                    <Input
-                                        placeholder="Enter Code..."
-                                        value={manualCode}
-                                        onChange={e => setManualCode(e.target.value)}
-                                        className="bg-black/40 border-white/10 text-white"
-                                        disabled={!!scanResult}
-                                    />
-                                    <Button type="submit" className="bg-white/10 hover:bg-white/20 text-white" disabled={!!scanResult}>Check</Button>
-                                </form>
-
-                                {/* File Upload */}
-                                <div className="relative">
-                                    <Input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        id="reception-qr-upload"
-                                        onChange={async (e) => {
-                                            const file = e.target.files?.[0]
-                                            if (!file) return
-
-                                            setProcessing(true)
-                                            try {
-                                                const html5QrCode = new Html5Qrcode("reception-qr-reader-hidden")
-                                                const decodedText = await html5QrCode.scanFile(file, true)
-                                                await handleScan(decodedText)
-                                            } catch (err) {
-                                                console.error("File scan error", err)
-                                                setScanResult({ status: 'error', message: 'Could not read QR from image' })
-                                                setProcessing(false)
-                                            }
-                                        }}
-                                        disabled={!!scanResult}
-                                    />
-                                    <Button
-                                        variant="outline"
-                                        className="w-full border-dashed border-white/20 hover:bg-white/5 hover:border-purple-500/50 text-gray-400 hover:text-purple-400 group"
-                                        onClick={() => document.getElementById('reception-qr-upload')?.click()}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <Upload className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                                            <span>Upload QR Image</span>
-                                        </div>
-                                    </Button>
-                                    {/* Hidden div for file reader instance requirement */}
-                                    <div id="reception-qr-reader-hidden" className="hidden"></div>
-                                </div>
+                                    <Upload className="w-4 h-4 text-purple-400" />
+                                    <span>Upload QR Image</span>
+                                </Button>
+                                <input
+                                    id="qr-upload"
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleFileUpload}
+                                />
                             </div>
                         </div>
                     </div>

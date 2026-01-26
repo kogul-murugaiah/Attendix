@@ -3,39 +3,39 @@ import { QrCode, BarChart3, Users, Zap, Shield, Globe } from "lucide-react"
 const features = [
     {
         title: "Instant QR Check-in",
-        description: "Scan attendees in milliseconds using our specialized high-speed scanner. Works offline.",
+        description: "Scan attendees in milliseconds using our specialized high-speed scanner. Works completely offline.",
         icon: QrCode,
-        className: "md:col-span-2 bg-gradient-to-br from-purple-500/10 to-indigo-500/10 border-purple-500/20"
+        className: "md:col-span-2 bg-gradient-to-br from-purple-500/10 via-[#1a1a2e] to-black"
     },
     {
         title: "Real-time Analytics",
-        description: "Watch your event fill up in real-time. Track peak hours and attendance rates instantly.",
+        description: "Watch your event fill up in real-time. Track peak hours instantly.",
         icon: BarChart3,
-        className: "md:col-span-1 bg-white/5 border-white/10"
+        className: "md:col-span-1 bg-[#0f0f16]"
     },
     {
         title: "Custom Reg Forms",
-        description: "Build beautiful registration forms with our drag-and-drop builder. No coding required.",
+        description: "Build beautiful registration forms with our drag-and-drop builder.",
         icon: Users,
-        className: "md:col-span-1 bg-white/5 border-white/10"
+        className: "md:col-span-1 bg-[#0f0f16]"
     },
     {
         title: "Multi-Org Support",
-        description: "Manage multiple college clubs or corporate departments from a single super-admin dashboard.",
+        description: "Manage multiple college clubs or departments from a single super-admin dashboard.",
         icon: Globe,
-        className: "md:col-span-2 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-500/20"
+        className: "md:col-span-2 bg-gradient-to-br from-cyan-500/10 via-[#1a2e2e] to-black"
     },
     {
         title: "Enterprise Security",
-        description: "Bank-grade encryption for all participant data.",
+        description: "Bank-grade encryption for all data.",
         icon: Shield,
-        className: "md:col-span-1 bg-white/5 border-white/10"
+        className: "md:col-span-1 bg-[#0f0f16]"
     },
     {
-        title: "Lightning Fast",
-        description: "Built on modern edge infrastructure for zero latency.",
+        title: "Zero Latency",
+        description: "Built on edge infrastructure.",
         icon: Zap,
-        className: "md:col-span-2 bg-white/5 border-white/10"
+        className: "md:col-span-2 bg-[#0f0f16]"
     },
 ]
 
@@ -57,13 +57,16 @@ export function Features() {
                     {features.map((feature, i) => (
                         <div
                             key={i}
-                            className={`p-8 rounded-3xl border backdrop-blur-sm transition-all hover:scale-[1.02] hover:shadow-2xl hover:shadow-purple-500/10 group ${feature.className}`}
+                            className={`p-8 rounded-3xl border border-white/5 backdrop-blur-sm transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-purple-500/10 group relative overflow-hidden ${feature.className}`}
                         >
-                            <div className="h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 text-white group-hover:scale-110 transition-transform">
-                                <feature.icon className="w-6 h-6" />
+                            {/* Hover Gradient Reveal */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+
+                            <div className="h-14 w-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 text-white group-hover:scale-110 transition-transform relative z-10 shadow-lg shadow-black/20">
+                                <feature.icon className="w-7 h-7" />
                             </div>
-                            <h3 className="text-xl font-semibold text-white mb-2">{feature.title}</h3>
-                            <p className="text-gray-400 leading-relaxed">{feature.description}</p>
+                            <h3 className="text-xl font-bold text-white mb-3 relative z-10">{feature.title}</h3>
+                            <p className="text-gray-400 leading-relaxed text-sm relative z-10">{feature.description}</p>
                         </div>
                     ))}
                 </div>

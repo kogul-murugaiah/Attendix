@@ -79,11 +79,13 @@ export function Pricing() {
                     {tiers.map((tier) => (
                         <div
                             key={tier.name}
-                            className={`relative p-8 rounded-3xl border backdrop-blur-sm flex flex-col ${tier.popular
-                                ? "bg-white/5 border-purple-500/50 shadow-2xl shadow-purple-500/10 scale-105 z-10"
-                                : "bg-black/20 border-white/10"
+                            className={`relative p-8 rounded-3xl border backdrop-blur-sm flex flex-col transition-all duration-300 group hover:shadow-2xl ${tier.popular
+                                ? "bg-white/5 border-purple-500/50 shadow-purple-500/10 scale-105 z-10 hover:shadow-purple-500/20"
+                                : "bg-black/20 border-white/10 hover:bg-white/5 hover:border-white/20 hover:scale-[1.02]"
                                 }`}
                         >
+                            {/* Hover Glow Effect */}
+                            <div className={`absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-3xl pointer-events-none ${tier.popular ? 'from-purple-500/10' : ''}`} />
                             {tier.popular && (
                                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-purple-500 to-cyan-500 text-xs font-bold text-white uppercase tracking-wider">
                                     Most Popular

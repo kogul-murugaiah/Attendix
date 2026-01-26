@@ -463,37 +463,6 @@ export default function ParticipantsTab() {
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Retry Failed Emails ({participants.filter(p => p.email_status === 'failed').length})
                 </Button>
-                <Button variant="outline" className="border-white/10 bg-black/50 text-gray-300 hover:bg-white/10 hover:text-white rounded-xl backdrop-blur-md" onClick={() => {
-                    // CSV Export Logic
-                    const baseHeaders = ['Code', 'Name', 'Email', 'Phone', 'College', 'Department', 'Year', 'Events']
-                    const customHeaders = customFields.map(f => f.field_label)
-                    const headers = [...baseHeaders, ...customHeaders]
-                    const csvContent = "data:text/csv;charset=utf-8,"
-                        + headers.join(",") + "\n"
-                        + participants.map(p => {
-                            const registeredEvents = p.events?.map(re => re.event_name).join('; ') || ''
-                            const baseData = [
-                                p.participant_code || p.qr_code || '',
-                                `"${p.full_name || p.name || ''}"`,
-                                p.email,
-                                p.phone || '',
-                                `"${p.custom_data?.college_name || p.college || ''}"`,
-                                `"${p.custom_data?.department || p.department || ''}"`,
-                                p.year_of_study || '',
-                                `"${registeredEvents}"`
-                            ]
-                            const customData = customFields.map(f => `"${p.custom_data?.[f.field_name] || ''}"`)
-                            return [...baseData, ...customData].join(",")
-                        }).join("\n")
-                    const encodedUri = encodeURI(csvContent)
-                    const link = document.createElement("a")
-                    link.setAttribute("href", encodedUri)
-                    link.setAttribute("download", "participants.csv")
-                    document.body.appendChild(link)
-                    link.click()
-                }}>
-                    Export CSV
-                </Button>
             </div>
 
             <div className="relative overflow-hidden rounded-2xl p-[1px] bg-gradient-to-br from-purple-500/20 via-transparent to-cyan-500/20">

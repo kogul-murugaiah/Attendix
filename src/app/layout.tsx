@@ -1,9 +1,20 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Space_Grotesk } from "next/font/google"; // 1. Import Font
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 
-const inter = Inter({ subsets: ["latin"] });
+// 2. Configure Fonts
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Symposium Attendance System",
@@ -17,11 +28,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className} suppressHydrationWarning>
+      <body className={`${inter.variable} ${spaceGrotesk.variable} font-sans antialiased`} suppressHydrationWarning>
         {children}
-        <footer className="fixed bottom-0 w-full py-2 text-center text-[10px] text-gray-500/50 mix-blend-plus-lighter pointer-events-none z-50 font-mono">
-          © 2026 Attendix. All rights reserved. &nbsp;|&nbsp; Developed by Kogul Murugaiah
-        </footer>
         <Toaster />
       </body>
     </html>

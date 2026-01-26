@@ -50,7 +50,6 @@ export default function EventScannerPage() {
         pending: 0
     })
     const [participants, setParticipants] = useState<Participant[]>([])
-    // Added to prevent stale closure issues in calculateStats initial call
     const [participantsLoaded, setParticipantsLoaded] = useState(false)
     const [filteredParticipants, setFilteredParticipants] = useState<Participant[]>([])
     const [searchQuery, setSearchQuery] = useState('')
@@ -72,9 +71,6 @@ export default function EventScannerPage() {
         filterParticipants()
     }, [participants, searchQuery, statusFilter])
 
-    // --- Real-time Subscription ---
-    // --- Real-time Subscription ---
-    // --- Real-time Subscription ---
     useEffect(() => {
         if (!assignedEvent) return
 
@@ -85,13 +81,10 @@ export default function EventScannerPage() {
                 {
                     event: '*',
                     schema: 'public',
-                    table: 'event_registrations', // Listen to the normalized table now!
-                    filter: `event_id=eq.${assignedEvent.id}` // Only updates for this event
+                    table: 'event_registrations',
+                    filter: `event_id=eq.${assignedEvent.id}`
                 },
                 async (payload) => {
-                    // Since we need to update the participant list which contains joined data,
-                    // it is simplest to just refetch the participant list or that specific participant.
-                    // A full refetch ensures consistency with the join.
                     fetchParticipants(assignedEvent.id, assignedEvent.organization_id)
                 }
             )
@@ -102,7 +95,6 @@ export default function EventScannerPage() {
         }
     }, [assignedEvent])
 
-    // --- GLOBAL BROADCAST LISTENER (Direct Line) ---
     useEffect(() => {
         if (!assignedEvent) return
 
@@ -112,8 +104,6 @@ export default function EventScannerPage() {
                 'broadcast',
                 { event: 'new-registration' },
                 (payload) => {
-                    // Event Manager needs to know if the new student is relevant? 
-                    // Technically yes, they are searchable immediately.
                     if (payload.payload.organization_id === assignedEvent.organization_id) {
                         fetchParticipants(assignedEvent.id, assignedEvent.organization_id)
                     }
@@ -150,13 +140,11 @@ export default function EventScannerPage() {
         const { data: eventData } = await supabase.from('events').select('*').eq('id', eventId).single()
         if (eventData) {
             setAssignedEvent(eventData)
-            // FIX: Pass organization_id directly to avoid race condition with state
             fetchParticipants(eventId, eventData.organization_id)
         }
     }
 
     const fetchParticipants = async (eventId: string, organizationId: string) => {
-        // Fetch all participants for the Organization and their event registrations
         const { data: allData, error } = await supabase
             .from('student_registrations')
             .select('*, event_registrations(*)')
@@ -178,7 +166,6 @@ export default function EventScannerPage() {
                 organization_id: r.organization_id,
                 gate_entry_status: r.checked_in,
                 gate_entry_timestamp: r.checked_in_at,
-                // Map Joined Event Data
                 events: r.event_registrations.map((er: any) => ({
                     event_id: er.event_id,
                     attendance_status: er.attendance_status,
@@ -190,7 +177,6 @@ export default function EventScannerPage() {
                 status: r.status
             }))
 
-            // Filter for THIS event
             const relevantParticipants = mappedParticipants.filter(p =>
                 p.events?.some(e => e.event_id === eventId)
             )
@@ -200,7 +186,6 @@ export default function EventScannerPage() {
         }
     }
 
-    // Recalculate stats whenever participants list changes
     useEffect(() => {
         if (assignedEvent && participants.length > 0) {
             calculateStats(participants, assignedEvent.id)
@@ -249,10 +234,9 @@ export default function EventScannerPage() {
         return registration ? registration.attendance_status : false
     }
 
-    const handleMarkAttendance = async (participantId: string) => {
+    const handleMarkAttendance = async (participantId: string, participantInfo?: { name: string, code: string }) => {
         if (!assignedEvent) return
 
-        // 1. Enforce Reception Check-in
         const participant = participants.find(p => p.id === participantId)
         if (participant && !participant.gate_entry_status) {
             toast.error("Participant must check in at Reception first!")
@@ -261,7 +245,6 @@ export default function EventScannerPage() {
 
         setProcessing(true)
         try {
-            // Get Staff ID for 'scanned_by'
             const { data: { user } } = await supabase.auth.getUser()
             let staffId = null
             if (user) {
@@ -269,7 +252,6 @@ export default function EventScannerPage() {
                 staffId = staff?.id
             }
 
-            // Update the normalized table
             const { error } = await supabase
                 .from('event_registrations')
                 .update({
@@ -284,9 +266,13 @@ export default function EventScannerPage() {
 
             await logScan(participantId, 'success', 'event_attendance')
 
-            toast.success(`Marked Present`) // Simplified msg locally
+            toast.success(`Marked Present for ${participantInfo?.name || 'Participant'}`)
             fetchParticipants(assignedEvent.id, assignedEvent.organization_id)
-            setScanResult({ status: 'success', message: 'Marked Present' })
+            setScanResult({
+                status: 'success',
+                message: `Marked Present for ${participantInfo?.name || 'Participant'}`,
+                participant: participantInfo ? { name: participantInfo.name, participant_code: participantInfo.code } as any : undefined
+            })
         } catch (err) {
             console.error(err)
             toast.error('Failed to update attendance')
@@ -300,7 +286,6 @@ export default function EventScannerPage() {
 
         setProcessing(true)
         try {
-            // Get Staff ID for 'scanned_by' or null
             const { data: { user } } = await supabase.auth.getUser()
             let staffId = null
             if (user) {
@@ -313,7 +298,7 @@ export default function EventScannerPage() {
                 .update({
                     attendance_status: false,
                     scanned_at: null,
-                    scanned_by: staffId // Log who undid it? Or null? Let's treat undo as an action too if we want.
+                    scanned_by: staffId
                 })
                 .eq('participant_id', participantId)
                 .eq('event_id', assignedEvent.id)
@@ -339,12 +324,12 @@ export default function EventScannerPage() {
         setScanResult(null)
 
         try {
-            // 1. Find participant by QR code
+            const cleanCode = code.trim()
             const { data: userData, error } = await supabase
                 .from('student_registrations')
                 .select('*, event_registrations(*)')
-                .eq('qr_code', code)
                 .eq('organization_id', assignedEvent.organization_id)
+                .ilike('qr_code', cleanCode)
                 .maybeSingle()
 
             if (error || !userData) {
@@ -354,7 +339,6 @@ export default function EventScannerPage() {
 
             const p: any = userData
 
-            // 2. Check if registered for THIS event using event_registrations
             const eventRegistration = p.event_registrations?.find(
                 (er: any) => er.event_id === assignedEvent.id
             )
@@ -369,7 +353,6 @@ export default function EventScannerPage() {
                 return
             }
 
-            // 3. Check Reception Entry
             if (!p.checked_in) {
                 setScanResult({
                     status: 'error',
@@ -380,7 +363,6 @@ export default function EventScannerPage() {
                 return
             }
 
-            // 4. Check if already attended
             if (eventRegistration.attendance_status) {
                 setScanResult({
                     status: 'error',
@@ -391,20 +373,35 @@ export default function EventScannerPage() {
                 return
             }
 
-            // 5. Mark Attendance
-            await handleMarkAttendance(p.id)
+            await handleMarkAttendance(p.id, { name: p.full_name, code: p.qr_code })
 
         } catch (err) {
             console.error('Scan error:', err)
             setScanResult({ status: 'error', message: 'Unexpected Error' })
         } finally {
             setProcessing(false)
-
-            // Auto-clear result after 3 seconds for continuous scanning
             setTimeout(() => {
                 setScanResult(null)
-                setManualCode('')
             }, 3000)
+        }
+    }
+
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file || !assignedEvent) return
+
+        setProcessing(true)
+        try {
+            const html5QrCode = new Html5Qrcode("reader-placeholder")
+            const result = await html5QrCode.scanFile(file, true)
+            if (result) {
+                await handleScan(result)
+            }
+        } catch (err) {
+            console.error("File Scan Error:", err)
+            toast.error("Could not find QR Code in image")
+        } finally {
+            setProcessing(false)
         }
     }
 
@@ -413,7 +410,7 @@ export default function EventScannerPage() {
         if (!user || !assignedEvent) return
         const { data: staff } = await supabase.from('staff').select('id').eq('user_id', user.id).single()
         if (staff) {
-            const { error } = await supabase.from('scan_logs').insert({
+            await supabase.from('scan_logs').insert({
                 organization_id: assignedEvent.organization_id,
                 participant_id: participantId,
                 scanned_by: staff.id,
@@ -421,7 +418,6 @@ export default function EventScannerPage() {
                 event_id: assignedEvent.id,
                 status: status
             })
-            if (error) console.error("Log Insert Error:", error)
         }
     }
 
@@ -669,7 +665,6 @@ export default function EventScannerPage() {
                         <div className="p-6 flex-1 overflow-y-auto">
                             <div className="relative rounded-2xl overflow-hidden border-2 border-white/10 shadow-inner bg-black aspect-square mb-6">
                                 <QRScanner onScan={handleScan} />
-                                {/* Overlay Styling */}
                                 <div className="absolute inset-0 border-[40px] border-black/50 pointer-events-none"></div>
                                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                     <div className="w-48 h-48 border-2 border-purple-500/50 rounded-lg relative">
@@ -681,7 +676,6 @@ export default function EventScannerPage() {
                                 </div>
                             </div>
 
-                            {/* Scan Result/Status */}
                             {scanResult && (
                                 <div className={`p-6 rounded-xl mb-4 border ${scanResult.status === 'success'
                                     ? 'bg-green-500/10 border-green-500/30'
@@ -704,74 +698,24 @@ export default function EventScannerPage() {
                                 </div>
                             )}
 
-                            <div className="relative my-4">
-                                <div className="absolute inset-0 flex items-center">
-                                    <span className="w-full border-t border-white/10" />
-                                </div>
-                                <div className="relative flex justify-center text-xs uppercase">
-                                    <span className="bg-[#13131a] px-2 text-gray-500">Or use alternative methods</span>
-                                </div>
-                            </div>
-
-                            <div className="flex flex-col gap-3">
-                                {/* Manual Code Entry */}
-                                <form
-                                    onSubmit={(e) => { e.preventDefault(); handleScan(manualCode); }}
-                                    className="flex gap-2"
+                            <div id="reader-placeholder" className="hidden"></div>
+                            <div className="space-y-4">
+                                <Button
+                                    onClick={() => document.getElementById('qr-upload')?.click()}
+                                    variant="outline"
+                                    className="w-full border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-xl h-12 flex items-center justify-center gap-2"
+                                    disabled={processing}
                                 >
-                                    <Input
-                                        placeholder="Enter Code..."
-                                        value={manualCode}
-                                        onChange={e => setManualCode(e.target.value)}
-                                        className="bg-black/40 border-white/10 text-white"
-                                        disabled={!!scanResult}
-                                    />
-                                    <Button
-                                        type="submit"
-                                        className="bg-white/10 hover:bg-white/20 text-white"
-                                        disabled={!!scanResult}
-                                    >
-                                        Check
-                                    </Button>
-                                </form>
-
-                                {/* File Upload */}
-                                <div className="relative">
-                                    <Input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        id="qr-image-upload"
-                                        onChange={async (e) => {
-                                            const file = e.target.files?.[0]
-                                            if (!file) return
-
-                                            setProcessing(true)
-                                            try {
-                                                const html5QrCode = new Html5Qrcode("qr-file-reader-hidden")
-                                                const decodedText = await html5QrCode.scanFile(file, true)
-                                                await handleScan(decodedText)
-                                            } catch (err) {
-                                                console.error("File scan error", err)
-                                                setScanResult({ status: 'error', message: 'Could not read QR from image' })
-                                                setProcessing(false)
-                                            }
-                                        }}
-                                        disabled={!!scanResult}
-                                    />
-                                    <Button
-                                        variant="outline"
-                                        className="w-full border-dashed border-white/20 hover:bg-white/5 hover:border-purple-500/50 text-gray-400 hover:text-purple-400 group"
-                                        onClick={() => document.getElementById('qr-image-upload')?.click()}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <Upload className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                                            <span>Upload QR Image</span>
-                                        </div>
-                                    </Button>
-                                    {/* Hidden div for file reader instance requirement */}
-                                    <div id="qr-file-reader-hidden" className="hidden"></div>
-                                </div>
+                                    <Upload className="w-4 h-4 text-purple-400" />
+                                    <span>Upload QR Image</span>
+                                </Button>
+                                <input
+                                    id="qr-upload"
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleFileUpload}
+                                />
                             </div>
                         </div>
                     </div>

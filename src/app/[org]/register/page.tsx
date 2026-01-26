@@ -125,7 +125,7 @@ export default function RegistrationPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!organization || !formId) return;
+        if (!organization || !formId || submitting) return;
         setSubmitting(true);
 
         try {
@@ -170,6 +170,37 @@ export default function RegistrationPage() {
 
             if (!coreData.full_name) coreData.full_name = formData['full_name'] || '-';
             setParticipantName(coreData.full_name);
+
+            // --- Robust QR Code Generation (Fix for Duplicates) ---
+            // 1. Fetch ALL codes for this organization to find the absolute MAX
+            const { data: allRegs, error: fetchError } = await supabase
+                .from('student_registrations')
+                .select('qr_code')
+                .eq('organization_id', organization.id);
+
+            if (fetchError) console.error("Error fetching codes for max check", fetchError);
+
+            let maxSeq = 0;
+            if (allRegs && allRegs.length > 0) {
+                allRegs.forEach(reg => {
+                    if (reg.qr_code) {
+                        // Extract number from format PREFIX-NNN
+                        const parts = reg.qr_code.split('-');
+                        const num = parseInt(parts[parts.length - 1]);
+                        if (!isNaN(num) && num > maxSeq) {
+                            maxSeq = num;
+                        }
+                    }
+                });
+            }
+
+            const nextSeq = maxSeq + 1;
+            const prefix = organization.org_code || 'PARTICIPANT';
+            const generatedCode = `${prefix}-${nextSeq.toString().padStart(3, '0')}`.toUpperCase();
+
+            coreData.qr_code = generatedCode;
+            coreData.register_number = generatedCode;
+            // --------------------------------------------------------
 
             const { data: insertedData, error } = await supabase
                 .from('student_registrations')

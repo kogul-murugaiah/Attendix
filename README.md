@@ -9,20 +9,25 @@ Built with **Next.js 16**, **Supabase**, and **Tailwind CSS**.
 ### 🏢 Multi-Tenancy & Organization Management
 *   **Organization Isolation**: Support for multiple organizations (colleges/companies) within a single instance. Data is strictly isolated via Row Level Security (RLS).
 *   **Role-Based Access Control (RBAC)**:
-    *   **Super Admin**: Manage platform-wide settings and organizations.
-    *   **Org Admin**: Full control over a specific organization's events,staff, and data.
-    *   **Staff**: specialized access for gatekeeping and event scanning.
+- **Super Admin**: Manage platform-wide settings and organizations.
+- **Org Admin**: Full control over a specific organization's events, staff, and branding (Custom Logos).
+- **Staff**: Specialized access for gatekeeping and event scanning.
 
 ### 📝 Smart Registration System
+- **Public Registration Portal**: Customizable public-facing pages for student registration (`/[org]/register`).
+- **Dynamic Forms**: Support for collecting student details (College, Dept, Year) and Event Preferences.
+- **Instant QR Generation**: Automatically generates a unique, signed QR code for every participant upon registration.
+- **Registration Control**: Admins can open/close registrations for specific events or platforms in real-time.
 *   **Public Registration Portal**: Customizable public-facing pages for student registration (`/[org]/register`).
 *   **Dynamic Forms**: Support for collecting student details (College, Dept, Year) and Event Preferences.
 *   **Instant QR Generation**: Automatically generates a unique, signed QR code for every participant upon registration.
 *   **Sequential ID Assignment**: Smart trigger-based generation of participant IDs (e.g., `XPL-001`, `XPL-002`) based on organization prefixes.
 
 ### ⚡ Real-Time Dashboards (WebSockets)
-*   **Global Broadcast System**: A custom architecture using Supabase Channels to ensure **instant** data synchronization across all devices.
-*   **Reception Console**: Real-time view of total registrations, gate check-in counts, and pending arrivals. Updates instantly when a student registers or enters.
-*   **Admin Dashboard**: Live feed of participants, improved real-time "Attendance" & "Participants" tabs that reflect changes without refreshing.
+- **Global Broadcast System**: A custom architecture using Supabase Channels to ensure **instant** data synchronization across all devices.
+- **Reception Console**: Real-time view of total registrations, gate check-in counts, and pending arrivals. Updates instantly when a student registers or enters.
+- **Admin Dashboard**: Live feed of participants, improved real-time "Attendance" & "Participants" tabs that reflect changes without refreshing.
+- **Real-time Scan Logs**: Activity feed showing instant check-in logs with student details and timestamps across all scanning stations.
 
 ### 📱 QR Scanning & Attendance
 *   **Gate Management**: Dedicated "Reception Console" for scanning tickets at the main entrance. Validates entry status and timestamps.
@@ -30,8 +35,9 @@ Built with **Next.js 16**, **Supabase**, and **Tailwind CSS**.
 *   **Anti-Duplication**: Prevents double check-ins and warns staff instantly.
 
 ### 📊 Data & Reporting
-*   **CSV Exports**: Export participant lists and attendance logs for external processing.
-*   **Live Stats**: Visual counters for turnout percentage and event popularity.
+- **CSV Exports**: Export participant lists and attendance logs for external processing.
+- **Enhanced Management**: Detailed participant views, advanced filtering by department, year, or event status.
+- **Live Stats**: Visual counters for turnout percentage and event popularity.
 
 ## 🛠️ Technology Stack
 *   **Framework**: [Next.js 16](https://nextjs.org/) (App Router, Turbopack)

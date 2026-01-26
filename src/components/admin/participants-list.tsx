@@ -19,7 +19,7 @@ import { FormField } from '@/lib/types/registration'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Pencil, FileSpreadsheet, Mail, Trash2 } from 'lucide-react'
+import { Pencil, FileSpreadsheet, Mail, Trash2, RefreshCw } from 'lucide-react'
 import { Badge } from "@/components/ui/badge"
 import * as XLSX from 'xlsx'
 
@@ -85,6 +85,8 @@ export default function ParticipantsTab() {
             }
 
             toast.success('Ticket sent successfully')
+            // Refresh the list to show the new email status
+            await fetchParticipants()
         } catch (error: any) {
             console.error('Error sending ticket:', error)
             toast.error(error.message || 'Failed to send ticket')
@@ -234,7 +236,8 @@ export default function ParticipantsTab() {
         const currentEventIds: Record<string, string | null> = {}
         for (let i = 1; i <= eventSlots; i++) {
             const index = i - 1
-            // Try getting from registered events first (regEvents), then custom fields
+            // Prefer real event registrations (source of truth)
+            // Fallback to custom_data only for legacy records that haven't been migrated
             const evtId = regEvents[index]?.event_id ||
                 customData[`event_${i}`] ||
                 customData[`event_preference_${i}`] ||
@@ -261,24 +264,22 @@ export default function ParticipantsTab() {
         e.preventDefault()
         if (!editingParticipant) return
 
-        // Prepare custom_data update with dynamic events
+        // Prepare custom_data update (excluding event IDs now)
         const currentCustomData = editingParticipant.custom_data || {};
-        const dynamicEventsUpdates: Record<string, any> = {};
-
-        // Loop through slots to populate custom_data fields
-        for (let i = 1; i <= eventSlots; i++) {
-            const eid = dynamicEventIds[`event_${i}`];
-            dynamicEventsUpdates[`event_${i}`] = eid;
-            dynamicEventsUpdates[`event_preference_${i}`] = eid;
-        }
 
         const updatedCustomData = {
             ...currentCustomData,
             college_name: editFormData.college,
             department: editFormData.department,
             year_of_study: editFormData.year_of_study,
-            ...dynamicEventsUpdates
         };
+
+        // Remove any legacy event keys from custom_data to clean it up
+        for (let i = 1; i <= 10; i++) {
+            delete (updatedCustomData as any)[`event_${i}`];
+            delete (updatedCustomData as any)[`event_preference_${i}`];
+            delete (updatedCustomData as any)[`event${i}_id`];
+        }
 
         const { error } = await supabase
             .from('student_registrations')
@@ -302,18 +303,44 @@ export default function ParticipantsTab() {
             // Ensure uniqueness
             const uniqueEventIds = Array.from(new Set(newEventIds));
 
-            // 1. Delete old registrations
-            await supabase.from('event_registrations').delete().eq('participant_id', editingParticipant.id);
+            // 1. Fetch CURRENT event registrations to check for attendance status
+            const { data: currentRegs, error: fetchError } = await supabase
+                .from('event_registrations')
+                .select('event_id, attendance_status')
+                .eq('participant_id', editingParticipant.id);
 
-            // 2. Insert new ones
-            if (uniqueEventIds.length > 0) {
-                const eventInserts = uniqueEventIds.map(eid => ({
+            if (fetchError) {
+                console.error("Error fetching existing registrations", fetchError);
+                toast.error("Failed to sync event changes correctly");
+                return;
+            }
+
+            const existingEventIds = currentRegs?.map(r => r.event_id) || [];
+
+            // 2. Determine Changes
+            const eventsToAdd = uniqueEventIds.filter(id => !existingEventIds.includes(id));
+            const eventsToRemove = existingEventIds.filter(id => !uniqueEventIds.includes(id));
+
+            // 3. EXECUTE: Remove unselected events
+            if (eventsToRemove.length > 0) {
+                await supabase
+                    .from('event_registrations')
+                    .delete()
+                    .eq('participant_id', editingParticipant.id)
+                    .in('event_id', eventsToRemove);
+            }
+
+            // 4. EXECUTE: Add new events (default attendance: false)
+            if (eventsToAdd.length > 0) {
+                const eventInserts = eventsToAdd.map(eid => ({
                     participant_id: editingParticipant.id,
                     event_id: eid,
-                    attendance_status: false // Default to false on change
+                    attendance_status: false
                 }));
                 await supabase.from('event_registrations').insert(eventInserts);
             }
+
+            // 5. KEPT events are untouched, preserving their 'attendance_status'
 
             toast.success('Participant updated successfully')
             setEditOpen(false)
@@ -417,6 +444,25 @@ export default function ParticipantsTab() {
                     <FileSpreadsheet className="w-4 h-4 mr-2" />
                     Export Excel
                 </Button>
+                <Button variant="outline" className="border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 rounded-xl backdrop-blur-md" onClick={async () => {
+                    const failedParticipants = participants.filter(p => p.email_status === 'failed');
+                    if (failedParticipants.length === 0) {
+                        toast.info('No failed emails to retry');
+                        return;
+                    }
+
+                    toast.promise(
+                        Promise.all(failedParticipants.map(p => handleSendTicket(p))),
+                        {
+                            loading: `Retrying ${failedParticipants.length} emails...`,
+                            success: 'Retry process completed',
+                            error: 'Some retries failed'
+                        }
+                    );
+                }}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry Failed Emails ({participants.filter(p => p.email_status === 'failed').length})
+                </Button>
                 <Button variant="outline" className="border-white/10 bg-black/50 text-gray-300 hover:bg-white/10 hover:text-white rounded-xl backdrop-blur-md" onClick={() => {
                     // CSV Export Logic
                     const baseHeaders = ['Code', 'Name', 'Email', 'Phone', 'College', 'Department', 'Year', 'Events']
@@ -460,6 +506,7 @@ export default function ParticipantsTab() {
                                 <TableHead className="text-gray-400 font-medium">College / Dept</TableHead>
                                 <TableHead className="text-gray-400 font-medium">Phone</TableHead>
                                 <TableHead className="text-gray-400 font-medium">Events</TableHead>
+                                <TableHead className="text-gray-400 font-medium text-center">Email</TableHead>
                                 {/* Dynamic custom field columns */}
                                 {customFields.map((field) => (
                                     <TableHead key={field.id} className="text-gray-400 font-medium">{field.field_label}</TableHead>
@@ -470,7 +517,7 @@ export default function ParticipantsTab() {
                         <TableBody>
                             {participants.length === 0 && !loading && (
                                 <TableRow className="border-white/5">
-                                    <TableCell colSpan={6 + customFields.length} className="text-center text-gray-500 py-8">No participants found</TableCell>
+                                    <TableCell colSpan={7 + customFields.length} className="text-center text-gray-500 py-8">No participants found</TableCell>
                                 </TableRow>
                             )}
                             {filteredParticipants.map((participant) => (
@@ -500,6 +547,23 @@ export default function ParticipantsTab() {
                                             )}
                                         </div>
                                     </TableCell>
+                                    <TableCell className="text-center">
+                                        {participant.email_status === 'sent' && (
+                                            <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/20 text-[10px] py-0">SENT</Badge>
+                                        )}
+                                        {participant.email_status === 'failed' && (
+                                            <Badge
+                                                variant="outline"
+                                                className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px] py-0 cursor-help"
+                                                title={participant.email_error || 'Unknown error'}
+                                            >
+                                                FAILED
+                                            </Badge>
+                                        )}
+                                        {(!participant.email_status || participant.email_status === 'pending') && (
+                                            <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 text-[10px] py-0">PENDING</Badge>
+                                        )}
+                                    </TableCell>
                                     {/* Dynamic custom field cells */}
                                     {customFields.map((field) => (
                                         <TableCell key={field.id} className="text-gray-400 text-xs">
@@ -513,8 +577,8 @@ export default function ParticipantsTab() {
                                                 size="icon"
                                                 onClick={() => handleSendTicket(participant)}
                                                 disabled={sendingEmailId === participant.id}
-                                                className="text-cyan-400 hover:text-white hover:bg-cyan-500/10 rounded-lg"
-                                                title="Send Ticket Email"
+                                                className={`${participant.email_status === 'failed' ? 'text-yellow-400 animate-pulse' : 'text-cyan-400'} hover:text-white hover:bg-cyan-500/10 rounded-lg`}
+                                                title={participant.email_status === 'failed' ? 'Retry Sending Ticket' : 'Send Ticket Email'}
                                             >
                                                 {sendingEmailId === participant.id ? (
                                                     <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />

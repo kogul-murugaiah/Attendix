@@ -78,6 +78,9 @@ export type Participant = {
         attendance_status: boolean
         scanned_at?: string | null
     }[]
+    email_status?: 'pending' | 'sent' | 'failed'
+    email_error?: string | null
+    email_sent_at?: string | null
     created_at: string
 }
 

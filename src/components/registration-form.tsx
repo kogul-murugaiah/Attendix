@@ -12,9 +12,12 @@ import { toast } from "sonner"
 import QRCode from 'qrcode'
 import { Event } from "@/lib/types"
 
-export default function RegistrationForm() {
+export default function RegistrationForm({ organizationId }: { organizationId?: string }) {
     const [loading, setLoading] = useState(false)
     const [events, setEvents] = useState<Event[]>([])
+
+    // Hardcoded fallback for SYM2024 if not provided via prop
+    const targetOrgId = organizationId || '00000000-0000-0000-0000-000000000000';
 
     // Form State
     const [formData, setFormData] = useState({
@@ -58,12 +61,8 @@ export default function RegistrationForm() {
     }
 
     const generateParticipantCode = async () => {
-        // Generate code: SYM2024-XXXX (Random for now since we can't easily rely on DB sequence in client without RPC/Edge Function being perfect. 
-        // Ideally use Supabase RPC `generate_participant_code`.
-        // I will try to use the RPC if it exists, or fall back to client side generation for demo.)
         const { data, error } = await supabase.rpc('generate_participant_code')
         if (error || !data) {
-            // Fallback
             const random = Math.floor(1000 + Math.random() * 9000)
             return `SYM2024-${random}`
         }
@@ -98,25 +97,52 @@ export default function RegistrationForm() {
             // Generate QR
             const qrDataUrl = await QRCode.toDataURL(code, { width: 300, margin: 2 })
 
-            // Insert
+            // Insert into the active student_registrations table
             const { data, error } = await supabase
-                .from('participants')
+                .from('student_registrations')
                 .insert({
-                    participant_code: code,
-                    name: formData.name,
+                    organization_id: targetOrgId,
+                    qr_code: code,
+                    full_name: formData.name,
                     email: formData.email,
                     phone: formData.phone,
                     college: formData.college,
                     department: formData.department,
                     year_of_study: formData.year_of_study,
-                    qr_code_data: code, // Storing code as data, or I could store dataUrl if needed. Schema says "qr_code_data TEXT". Prompt says "stores the participant_code".
-                    event1_id: formData.event1_id,
-                    event2_id: formData.event2_id,
-                    event3_id: formData.event3_id,
+                    status: 'pending',
+                    custom_data: {
+                        // event_ids are now stored in event_registrations table
+                    }
                 })
+                .select('id')
+                .single()
 
             if (error) {
                 throw error
+            }
+
+            const participantId = data.id
+
+            // Insert Event Registrations (Source of Truth for Attendance/Scanning)
+            const selectedEventIds = [formData.event1_id, formData.event2_id, formData.event3_id].filter(id => id);
+
+            if (selectedEventIds.length > 0) {
+                const eventInserts = selectedEventIds.map(eid => ({
+                    participant_id: participantId,
+                    event_id: eid,
+                    attendance_status: false
+                }));
+
+                const { error: eventError } = await supabase
+                    .from('event_registrations')
+                    .insert(eventInserts);
+
+                if (eventError) {
+                    console.error('Error inserting event registrations:', eventError);
+                    // Optional: Consider if we should throw or just log? 
+                    // For now, log but continue so we don't block the user success screen, 
+                    // but ideally this transaction should be atomic.
+                }
             }
 
             // Success
@@ -137,6 +163,7 @@ export default function RegistrationForm() {
                     body: JSON.stringify({
                         to: formData.email,
                         subject: 'Registration Confirmed - Symposium 2024',
+                        participantId: participantId,
                         html: `
                 <h1>Registration Confirmed</h1>
                 <p>Hi ${formData.name},</p>
@@ -155,13 +182,13 @@ export default function RegistrationForm() {
                 })
             } catch (emailErr) {
                 console.error('Email failed', emailErr)
-                toast.error('Registration successful but email failed to send')
+                // We don't toast error here because the API already handles status tracking 
+                // and we don't want to confuse the user if the registration was successful.
             }
 
         } catch (error: any) {
             console.error('Registration Error:', error)
-            console.error('Error Details:', JSON.stringify(error, null, 2))
-            toast.error(error.message || error.error_description || 'Registration failed')
+            toast.error(error.message || 'Registration failed')
         } finally {
             setLoading(false)
         }

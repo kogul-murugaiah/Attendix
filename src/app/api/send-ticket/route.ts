@@ -127,16 +127,51 @@ export async function POST(req: NextRequest) {
             name: `${sanitizedName}.png`,
         }]
 
-        // Send email
-        const result = await apiInstance.sendTransacEmail(sendSmtpEmail)
+        const supabase = createAdminClient();
 
-        return NextResponse.json({ success: true, data: result })
+        try {
+            // Send email
+            const result = await apiInstance.sendTransacEmail(sendSmtpEmail)
+
+            // Update status to sent
+            if (participantId) {
+                await supabase
+                    .from('student_registrations')
+                    .update({
+                        email_status: 'sent',
+                        email_sent_at: new Date().toISOString(),
+                        email_error: null
+                    })
+                    .eq('id', participantId);
+            }
+
+            return NextResponse.json({ success: true, data: result })
+        } catch (emailErr: any) {
+            console.error('Email sending failed:', emailErr);
+
+            // Mark as failed in DB but return success:true to not block the registration flow
+            if (participantId) {
+                await supabase
+                    .from('student_registrations')
+                    .update({
+                        email_status: 'failed',
+                        email_error: emailErr.message || 'Unknown error'
+                    })
+                    .eq('id', participantId);
+            }
+
+            // Still return 200/success so the UI doesn't show an error to the student
+            return NextResponse.json({
+                success: true,
+                warning: 'Email queued for retry',
+                error: emailErr.message
+            });
+        }
 
     } catch (err: any) {
-        console.error('Brevo email error:', err)
+        console.error('API error:', err)
         return NextResponse.json({
-            error: err.message || 'Failed to send email',
-            details: err.response?.body || err
+            error: err.message || 'Internal server error',
         }, { status: 500 })
     }
 }

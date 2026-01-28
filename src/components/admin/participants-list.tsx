@@ -534,11 +534,28 @@ export default function ParticipantsTab() {
                                         )}
                                     </TableCell>
                                     {/* Dynamic custom field cells */}
-                                    {customFields.map((field) => (
-                                        <TableCell key={field.id} className="text-gray-400 text-xs">
-                                            {participant.custom_data?.[field.field_name] || '-'}
-                                        </TableCell>
-                                    ))}
+                                    {customFields.map((field) => {
+                                        const value = participant.custom_data?.[field.field_name];
+                                        const isUrl = typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'));
+
+                                        return (
+                                            <TableCell key={field.id} className="text-gray-400 text-xs">
+                                                {isUrl ? (
+                                                    <a
+                                                        href={value}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 font-medium transition-colors group/link"
+                                                    >
+                                                        <span>View File</span>
+                                                        <FileSpreadsheet className="w-3 h-3 transition-transform group-hover/link:-translate-y-0.5" />
+                                                    </a>
+                                                ) : (
+                                                    value || '-'
+                                                )}
+                                            </TableCell>
+                                        );
+                                    })}
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-2">
                                             <Button
@@ -618,11 +635,70 @@ export default function ParticipantsTab() {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-gray-400 text-xs uppercase tracking-wider font-medium">Department</Label>
-                                <Input value={editFormData.department} onChange={e => setEditFormData({ ...editFormData, department: e.target.value })} className="bg-black/50 border-white/10 text-white focus:border-purple-500/50 focus:ring-purple-500/20 rounded-xl" />
+                                <select
+                                    className="w-full h-10 px-3 bg-black/50 border border-white/10 rounded-xl text-white focus:border-purple-500/50 focus:ring-purple-500/20 outline-none"
+                                    value={[
+                                        "Computer Science and Engineering (CSE)", "Information Technology (IT)",
+                                        "Electronics and Communication Engineering (ECE)", "Electrical and Electronics Engineering (EEE)",
+                                        "Mechanical Engineering (MECH)", "Civil Engineering (CIVIL)",
+                                        "Artificial Intelligence and Data Science (AI & DS)", "Artificial Intelligence and Machine Learning (AI & ML)",
+                                        "Cyber Security", "Biotechnology", "Chemical Engineering",
+                                        "Bio-Medical Engineering", "Food Technology"
+                                    ].includes(editFormData.department) ? editFormData.department : (editFormData.department ? "Other" : "")}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        if (val === "Other") {
+                                            setEditFormData({ ...editFormData, department: "Other" });
+                                        } else {
+                                            setEditFormData({ ...editFormData, department: val });
+                                        }
+                                    }}
+                                >
+                                    <option value="">-- Select Department --</option>
+                                    {[
+                                        "Computer Science and Engineering (CSE)", "Information Technology (IT)",
+                                        "Electronics and Communication Engineering (ECE)", "Electrical and Electronics Engineering (EEE)",
+                                        "Mechanical Engineering (MECH)", "Civil Engineering (CIVIL)",
+                                        "Artificial Intelligence and Data Science (AI & DS)", "Artificial Intelligence and Machine Learning (AI & ML)",
+                                        "Cyber Security", "Biotechnology", "Chemical Engineering",
+                                        "Bio-Medical Engineering", "Food Technology"
+                                    ].map(dept => (
+                                        <option key={dept} value={dept}>{dept}</option>
+                                    ))}
+                                    <option value="Other">Other (Please specify)</option>
+                                </select>
+
+                                {/* Custom Input for "Other" in Admin Edit */}
+                                {(editFormData.department === "Other" || (![
+                                    "Computer Science and Engineering (CSE)", "Information Technology (IT)",
+                                    "Electronics and Communication Engineering (ECE)", "Electrical and Electronics Engineering (EEE)",
+                                    "Mechanical Engineering (MECH)", "Civil Engineering (CIVIL)",
+                                    "Artificial Intelligence and Data Science (AI & DS)", "Artificial Intelligence and Machine Learning (AI & ML)",
+                                    "Cyber Security", "Biotechnology", "Chemical Engineering",
+                                    "Bio-Medical Engineering", "Food Technology", "", "Other"
+                                ].includes(editFormData.department))) && (
+                                        <div className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                                            <Input
+                                                placeholder="Type custom department name"
+                                                value={editFormData.department === "Other" ? "" : editFormData.department}
+                                                onChange={e => setEditFormData({ ...editFormData, department: e.target.value })}
+                                                className="bg-black/50 border-cyan-500/30 text-white focus:border-cyan-500/50 rounded-xl"
+                                            />
+                                        </div>
+                                    )}
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-gray-400 text-xs uppercase tracking-wider font-medium">Year</Label>
-                                <Input value={editFormData.year_of_study} onChange={e => setEditFormData({ ...editFormData, year_of_study: e.target.value })} className="bg-black/50 border-white/10 text-white focus:border-purple-500/50 focus:ring-purple-500/20 rounded-xl" />
+                                <select
+                                    className="w-full h-10 px-3 bg-black/50 border border-white/10 rounded-xl text-white focus:border-purple-500/50 focus:ring-purple-500/20 outline-none"
+                                    value={editFormData.year_of_study}
+                                    onChange={e => setEditFormData({ ...editFormData, year_of_study: e.target.value })}
+                                >
+                                    <option value="">-- Select Year --</option>
+                                    {["I Year", "II Year", "III Year", "IV Year", "PG", "Other"].map(year => (
+                                        <option key={year} value={year}>{year}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
 

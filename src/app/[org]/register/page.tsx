@@ -145,11 +145,15 @@ export default function RegistrationPage() {
             };
 
             const selectedEvents: string[] = [];
+            const fileUploads: { fieldName: string, file: File }[] = [];
 
             fields.forEach(field => {
                 const value = formData[field.field_name];
 
-                if (field.field_name.startsWith('event_') || field.field_name.includes('event')) {
+                if (field.field_type === 'file' && value instanceof File) {
+                    fileUploads.push({ fieldName: field.field_name, file: value });
+                }
+                else if (field.field_name.startsWith('event_') || field.field_name.includes('event')) {
                     if (value && typeof value === 'string' && value.length > 20) {
                         selectedEvents.push(value);
                     }
@@ -161,12 +165,44 @@ export default function RegistrationPage() {
                     coreData[field.field_name] = value;
                 }
                 else if (field.field_name === 'year') coreData.year_of_study = value;
-                else if (field.field_name === 'dept') coreData.department = value;
+                else if (field.field_name === 'dept' || field.field_name === 'department') {
+                    if (value === 'Other (Please specify)' && formData['custom_department']) {
+                        coreData.department = formData['custom_department'];
+                    } else {
+                        coreData.department = value;
+                    }
+                }
                 else if (field.field_name === 'college_name') coreData.college = value;
                 else {
                     coreData.custom_data[field.field_name] = value;
                 }
             });
+
+            // Handle File Uploads
+            if (fileUploads.length > 0) {
+                toast.loading("Uploading files...", { id: 'upload' });
+                for (const upload of fileUploads) {
+                    const fileExt = upload.file.name.split('.').pop();
+                    const fileName = `${organization.id}/${crypto.randomUUID()}.${fileExt}`;
+
+                    const { data: uploadData, error: uploadError } = await supabase.storage
+                        .from('registrations')
+                        .upload(fileName, upload.file);
+
+                    if (uploadError) {
+                        toast.error(`Failed to upload ${upload.file.name}: ${uploadError.message}`, { id: 'upload' });
+                        throw uploadError;
+                    }
+
+                    // Get public URL
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('registrations')
+                        .getPublicUrl(fileName);
+
+                    coreData.custom_data[upload.fieldName] = publicUrl;
+                }
+                toast.success("Files uploaded!", { id: 'upload' });
+            }
 
             if (!coreData.full_name) coreData.full_name = formData['full_name'] || '-';
             setParticipantName(coreData.full_name);
@@ -310,16 +346,41 @@ export default function RegistrationPage() {
                 );
             case 'select':
                 return (
-                    <Select onValueChange={v => handleInputChange(field.field_name, v)} value={formData[field.field_name]}>
-                        <SelectTrigger className={inputClasses}>
-                            <SelectValue placeholder={field.placeholder || "Select option"} />
-                        </SelectTrigger>
-                        <SelectContent className="bg-[#1a0f2e] border border-purple-500/30 text-white rounded-lg">
-                            {options.map((opt: string) => (
-                                <SelectItem key={opt} value={opt} className="focus:bg-cyan-500/20 rounded-md cursor-pointer">{opt}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <div className="space-y-3">
+                        <Select
+                            onValueChange={v => {
+                                handleInputChange(field.field_name, v);
+                                // Reset custom other value if we switch away from Other
+                                if (field.field_name === 'department' && v !== 'Other (Please specify)') {
+                                    handleInputChange('custom_department', '');
+                                }
+                            }}
+                            value={formData[field.field_name]}
+                        >
+                            <SelectTrigger className={inputClasses}>
+                                <SelectValue placeholder={field.placeholder || "Select option"} />
+                            </SelectTrigger>
+                            <SelectContent className="bg-[#1a0f2e] border border-purple-500/30 text-white rounded-lg">
+                                {options.map((opt: string) => (
+                                    <SelectItem key={opt} value={opt} className="focus:bg-cyan-500/20 rounded-md cursor-pointer">{opt}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        {/* Custom Input for "Other" Department */}
+                        {field.field_name === 'department' && formData[field.field_name] === 'Other (Please specify)' && (
+                            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                <Input
+                                    placeholder="Please specify your department"
+                                    value={formData['custom_department'] || ''}
+                                    onChange={e => handleInputChange('custom_department', e.target.value)}
+                                    className={`${inputClasses} border-cyan-400/30 bg-cyan-400/5`}
+                                    required
+                                />
+                                <p className="text-[10px] text-cyan-400/70 mt-1 ml-1">Type your department name above</p>
+                            </div>
+                        )}
+                    </div>
                 );
             case 'checkbox':
                 if (options.length > 0) {
@@ -372,6 +433,35 @@ export default function RegistrationPage() {
                             </div>
                         ))}
                     </RadioGroup>
+                );
+            case 'file':
+                return (
+                    <div className="flex flex-col gap-2">
+                        <Input
+                            type="file"
+                            id={field.field_name}
+                            disabled={submitting}
+                            required={field.is_required}
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    // Limit file size (e.g., 5MB)
+                                    if (file.size > 5 * 1024 * 1024) {
+                                        toast.error("File size must be less than 5MB");
+                                        e.target.value = '';
+                                        return;
+                                    }
+                                    handleInputChange(field.field_name, file);
+                                }
+                            }}
+                            className={`${inputClasses} py-2 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer`}
+                        />
+                        {formData[field.field_name] instanceof File && (
+                            <p className="text-xs text-cyan-400 font-medium">
+                                Selected: {formData[field.field_name].name}
+                            </p>
+                        )}
+                    </div>
                 );
             default:
                 return (

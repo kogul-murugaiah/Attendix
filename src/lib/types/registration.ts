@@ -1,4 +1,4 @@
-export type FieldType = 'text' | 'email' | 'tel' | 'select' | 'textarea' | 'number' | 'date' | 'checkbox' | 'radio';
+export type FieldType = 'text' | 'email' | 'tel' | 'select' | 'textarea' | 'number' | 'date' | 'checkbox' | 'radio' | 'file';
 
 export interface RegistrationForm {
     id: string;

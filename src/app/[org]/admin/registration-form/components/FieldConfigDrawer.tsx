@@ -41,6 +41,7 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
     { value: 'radio', label: 'Radio Buttons' },
     { value: 'checkbox', label: 'Checkbox' },
     { value: 'date', label: 'Date Picker' },
+    { value: 'file', label: 'File Upload' },
 ];
 
 export default function FieldConfigDrawer({

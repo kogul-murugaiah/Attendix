@@ -42,6 +42,7 @@ export default function EventScannerPage() {
     const router = useRouter()
 
     // --- State ---
+    const [organization, setOrganization] = useState<{ name: string } | null>(null)
     const [view, setView] = useState<'dashboard' | 'scanner'>('dashboard')
     const [assignedEvent, setAssignedEvent] = useState<Event | null>(null)
     const [stats, setStats] = useState({
@@ -141,6 +142,14 @@ export default function EventScannerPage() {
         if (eventData) {
             setAssignedEvent(eventData)
             fetchParticipants(eventId, eventData.organization_id)
+
+            // Fetch Organization details for Branding
+            const { data: orgData } = await supabase
+                .from('organizations')
+                .select('name')
+                .eq('id', eventData.organization_id)
+                .single()
+            if (orgData) setOrganization(orgData)
         }
     }
 
@@ -434,9 +443,16 @@ export default function EventScannerPage() {
     return (
         <div className="min-h-screen bg-[#0a0a0f] text-white font-sans selection:bg-purple-500/30">
             {/* Background Gradients */}
-            <div className="fixed inset-0 pointer-events-none">
+            <div className="fixed inset-0 pointer-events-none overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-purple-900/10 to-transparent"></div>
                 <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-purple-600/5 rounded-full blur-[120px]"></div>
+
+                {/* Watermark */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] select-none">
+                    <h1 className="text-[15vw] font-black uppercase tracking-tighter -rotate-12 whitespace-nowrap">
+                        {organization?.name}
+                    </h1>
+                </div>
             </div>
 
             <div className="relative z-10 container mx-auto p-6 space-y-8">

@@ -33,6 +33,10 @@ export default function RegistrationPage() {
     const [fields, setFields] = useState<FormField[]>([]);
     const [events, setEvents] = useState<any[]>([]);
     const [formData, setFormData] = useState<Record<string, any>>({});
+    const [teamName, setTeamName] = useState('');
+    const [members, setMembers] = useState<{ id: string; data: Record<string, any> }[]>([
+        { id: crypto.randomUUID(), data: {} }
+    ]);
 
     useEffect(() => {
         if (organization) {
@@ -119,8 +123,27 @@ export default function RegistrationPage() {
         }
     };
 
-    const handleInputChange = (fieldName: string, value: any) => {
-        setFormData(prev => ({ ...prev, [fieldName]: value }));
+    const handleInputChange = (fieldName: string, value: any, memberId?: string) => {
+        if (memberId) {
+            setMembers(prev => prev.map(m =>
+                m.id === memberId ? { ...m, data: { ...m.data, [fieldName]: value } } : m
+            ));
+        } else {
+            setFormData(prev => ({ ...prev, [fieldName]: value }));
+        }
+    };
+
+    const addMember = () => {
+        if (members.length >= (organization?.max_team_members || 5)) {
+            toast.error(`Maximum ${organization?.max_team_members || 5} members allowed`);
+            return;
+        }
+        setMembers([...members, { id: crypto.randomUUID(), data: {} }]);
+    };
+
+    const removeMember = (id: string) => {
+        if (members.length <= 1) return;
+        setMembers(members.filter(m => m.id !== id));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -129,168 +152,169 @@ export default function RegistrationPage() {
         setSubmitting(true);
 
         try {
-            for (const field of fields) {
-                if (field.is_required && !formData[field.field_name]) {
-                    toast.error(`${field.field_label} is required`);
-                    setSubmitting(false);
-                    return;
-                }
+            const teamMode = organization.team_events_enabled;
+            const registrationGroupId = crypto.randomUUID();
+
+            if (teamMode && !teamName) {
+                toast.error("Team Name is required");
+                setSubmitting(false);
+                return;
             }
 
-            const coreData: any = {
-                organization_id: organization.id,
-                form_id: formId,
-                status: 'pending',
-                custom_data: {}
-            };
+            // Create an array of registrations to process
+            const toRegister = teamMode ? members : [{ id: 'single', data: formData }];
 
-            const selectedEvents: string[] = [];
-            const fileUploads: { fieldName: string, file: File }[] = [];
-
-            fields.forEach(field => {
-                const value = formData[field.field_name];
-
-                if (field.field_type === 'file' && value instanceof File) {
-                    fileUploads.push({ fieldName: field.field_name, file: value });
-                }
-                else if (field.field_name.startsWith('event_') || field.field_name.includes('event')) {
-                    if (value && typeof value === 'string' && value.length > 20) {
-                        selectedEvents.push(value);
-                    }
-                }
-                else if ([
-                    'full_name', 'email', 'phone',
-                    'college', 'department', 'year_of_study', 'register_number'
-                ].includes(field.field_name)) {
-                    coreData[field.field_name] = value;
-                }
-                else if (field.field_name === 'year') coreData.year_of_study = value;
-                else if (field.field_name === 'dept' || field.field_name === 'department') {
-                    if (value === 'Other (Please specify)' && formData['custom_department']) {
-                        coreData.department = formData['custom_department'];
-                    } else {
-                        coreData.department = value;
-                    }
-                }
-                else if (field.field_name === 'college_name') coreData.college = value;
-                else {
-                    coreData.custom_data[field.field_name] = value;
-                }
-            });
-
-            // Handle File Uploads
-            if (fileUploads.length > 0) {
-                toast.loading("Uploading files...", { id: 'upload' });
-                for (const upload of fileUploads) {
-                    const fileExt = upload.file.name.split('.').pop();
-                    const fileName = `${organization.id}/${crypto.randomUUID()}.${fileExt}`;
-
-                    const { data: uploadData, error: uploadError } = await supabase.storage
-                        .from('registrations')
-                        .upload(fileName, upload.file);
-
-                    if (uploadError) {
-                        toast.error(`Failed to upload ${upload.file.name}: ${uploadError.message}`, { id: 'upload' });
-                        throw uploadError;
+            // Validate all members
+            for (const member of toRegister) {
+                const memberIndex = toRegister.indexOf(member);
+                for (const field of fields) {
+                    // Skip validation for event fields if not the team lead in team mode
+                    if (teamMode && memberIndex > 0 && (field.field_name.startsWith('event_') || field.field_name.includes('event'))) {
+                        continue;
                     }
 
-                    // Get public URL
-                    const { data: { publicUrl } } = supabase.storage
-                        .from('registrations')
-                        .getPublicUrl(fileName);
+                    const value = member.data[field.field_name];
+                    const isEmpty = !value || value === 'none';
 
-                    coreData.custom_data[upload.fieldName] = publicUrl;
-                }
-                toast.success("Files uploaded!", { id: 'upload' });
-            }
-
-            if (!coreData.full_name) coreData.full_name = formData['full_name'] || '-';
-            setParticipantName(coreData.full_name);
-
-            // QR code generation is now handled by the database trigger: trigger_generate_participant_code
-            // This prevents race conditions and ensures consistency.
-
-            const { data: insertedData, error } = await supabase
-                .from('student_registrations')
-                .insert(coreData)
-                .select('id, qr_code')
-                .single();
-
-            if (error) {
-                if (error.code === '23505') throw new Error("This email is already registered.");
-                throw error;
-            }
-
-            setParticipantCode(insertedData.qr_code);
-
-            if (selectedEvents.length > 0) {
-                const uniqueEvents = Array.from(new Set(selectedEvents));
-                const maxParticipants = organization.max_participants_per_event || 100;
-
-                for (const eventId of uniqueEvents) {
-                    const { count } = await supabase
-                        .from('event_registrations')
-                        .select('*', { count: 'exact', head: true })
-                        .eq('event_id', eventId);
-
-                    if (count !== null && count >= maxParticipants) {
-                        const event = events.find(e => e.id === eventId);
-                        toast.error(`Event "${event?.event_name || 'Selected event'}" has reached capacity.`);
+                    if (field.is_required && isEmpty) {
+                        toast.error(`${field.field_label} is required ${teamMode ? `for member ${memberIndex + 1}` : ''}`);
                         setSubmitting(false);
                         return;
                     }
                 }
-
-                const eventInserts = uniqueEvents.map(eid => ({
-                    participant_id: insertedData.id,
-                    event_id: eid,
-                    attendance_status: false
-                }));
-
-                await supabase.from('event_registrations').insert(eventInserts);
             }
 
-            const channel = supabase.channel('app-global')
-            await channel.subscribe(async (status) => {
-                if (status === 'SUBSCRIBED') {
-                    await channel.send({
-                        type: 'broadcast',
-                        event: 'new-registration',
-                        payload: {
-                            organization_id: organization.id,
-                            student_id: insertedData.id,
-                            name: coreData.full_name
-                        },
-                    })
-                    supabase.removeChannel(channel)
-                }
-            })
+            const results: any[] = [];
 
-            // Trigger Email Sending
-            if (coreData.email) {
-                try {
-                    await fetch('/api/send-ticket', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            participantId: insertedData.id,
-                            email: coreData.email,
-                            name: coreData.full_name,
-                            eventName: selectedEvents.join(', '), // Send raw list for logging if needed, template ignores it now
-                            participantCode: insertedData.qr_code,
-                            organizationName: organization.org_name,
-                            organizationId: organization.id,
-                            // No date/venue needed for generic ticket
-                        })
-                    });
-                } catch (emailErr) {
-                    console.error("Failed to trigger email", emailErr);
-                    // Don't block success UI if email fails
+            // Extract Lead's event preferences if in team mode
+            let leadEventIds: string[] = [];
+            if (teamMode && members.length > 0) {
+                const leadData = members[0].data;
+                fields.forEach(field => {
+                    if (field.field_name.startsWith('event_') || field.field_name.includes('event')) {
+                        const value = leadData[field.field_name];
+                        if (value && typeof value === 'string' && value.length > 20) {
+                            leadEventIds.push(value);
+                        }
+                    }
+                });
+                leadEventIds = Array.from(new Set(leadEventIds));
+            }
+
+            for (const member of toRegister) {
+                const memberData = member.data;
+                const coreData: any = {
+                    organization_id: organization.id,
+                    form_id: formId,
+                    status: 'pending',
+                    custom_data: {},
+                    team_name: teamMode ? teamName : null,
+                    registration_group_id: teamMode ? registrationGroupId : null
+                };
+
+                const selectedEvents: string[] = [];
+                const fileUploads: { fieldName: string, file: File }[] = [];
+
+                fields.forEach(field => {
+                    const value = memberData[field.field_name];
+
+                    if (field.field_type === 'file' && value instanceof File) {
+                        fileUploads.push({ fieldName: field.field_name, file: value });
+                    }
+                    else if (field.field_name.startsWith('event_') || field.field_name.includes('event')) {
+                        // In team mode, event selection is handled by leadEventIds pre-calculated above
+                        if (!teamMode && value && typeof value === 'string' && value.length > 20) {
+                            selectedEvents.push(value);
+                        }
+                    }
+                    else if ([
+                        'full_name', 'email', 'phone',
+                        'college', 'department', 'year_of_study', 'register_number'
+                    ].includes(field.field_name)) {
+                        coreData[field.field_name] = value;
+                    }
+                    else if (field.field_name === 'year') coreData.year_of_study = value;
+                    else if (field.field_name === 'dept' || field.field_name === 'department') {
+                        if (value === 'Other (Please specify)' && memberData['custom_department']) {
+                            coreData.department = memberData['custom_department'];
+                        } else {
+                            coreData.department = value;
+                        }
+                    }
+                    else if (field.field_name === 'college_name') coreData.college = value;
+                    else {
+                        coreData.custom_data[field.field_name] = value;
+                    }
+                });
+
+                // Shared fields in Team Mode
+                if (teamMode) {
+                    // For team mode, shared fields like College or Event 1 are usually same
+                    // But our structure allows individual. 
+                    // Let's assume the FIRST member sets the tone for shared data if not filled for others?
+                    // Or just let them be individual. 
+                }
+
+                if (fileUploads.length > 0) {
+                    for (const upload of fileUploads) {
+                        const fileExt = upload.file.name.split('.').pop();
+                        const fileName = `${organization.id}/${crypto.randomUUID()}.${fileExt}`;
+                        const { error: uploadError } = await supabase.storage.from('registrations').upload(fileName, upload.file);
+                        if (uploadError) throw uploadError;
+                        const { data: { publicUrl } } = supabase.storage.from('registrations').getPublicUrl(fileName);
+                        coreData.custom_data[upload.fieldName] = publicUrl;
+                    }
+                }
+
+                if (!coreData.full_name) coreData.full_name = memberData['full_name'] || '-';
+
+                const { data: insertedData, error } = await supabase
+                    .from('student_registrations')
+                    .insert(coreData)
+                    .select('id, qr_code')
+                    .single();
+
+                if (error) {
+                    if (error.code === '23505') throw new Error(`Email ${coreData.email} is already registered.`);
+                    throw error;
+                }
+
+                results.push({ ...insertedData, full_name: coreData.full_name, email: coreData.email });
+
+                if (selectedEvents.length > 0 || (teamMode && leadEventIds.length > 0)) {
+                    const finalEvents = teamMode ? leadEventIds : Array.from(new Set(selectedEvents));
+                    const eventInserts = finalEvents.map(eid => ({
+                        participant_id: insertedData.id,
+                        event_id: eid,
+                        attendance_status: false
+                    }));
+                    await supabase.from('event_registrations').insert(eventInserts);
+                }
+
+                // Trigger Email Sending (Individual)
+                if (coreData.email) {
+                    try {
+                        fetch('/api/send-ticket', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                participantId: insertedData.id,
+                                email: coreData.email,
+                                name: coreData.full_name,
+                                eventName: selectedEvents.join(', '),
+                                participantCode: insertedData.qr_code,
+                                organizationName: organization.org_name,
+                                organizationId: organization.id,
+                            })
+                        });
+                    } catch (e) { }
                 }
             }
 
+            setParticipantName(teamMode ? teamName : results[0].full_name);
+            setParticipantCode(teamMode ? `TEAM: ${results.length}` : results[0].qr_code);
             setSuccess(true);
-            toast.success("Registration Successful!");
+            toast.success(teamMode ? "Team Registered Successfully!" : "Registration Successful!");
 
         } catch (err: any) {
             toast.error(err.message || 'Registration failed');
@@ -299,13 +323,15 @@ export default function RegistrationPage() {
         }
     };
 
-    const renderField = (field: FormField) => {
+    const renderField = (field: FormField, memberId?: string) => {
+        const currentData = memberId ? (members.find(m => m.id === memberId)?.data || {}) : formData;
+
         const inputClasses = "bg-[#1a0f2e]/50 border border-purple-500/20 text-white placeholder:text-gray-500 focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/20 rounded-lg transition-all duration-200 hover:bg-[#1a0f2e]/70 hover:border-purple-500/30 h-11 px-4";
 
         const commonProps = {
-            id: field.field_name,
+            id: memberId ? `${memberId}-${field.field_name}` : field.field_name,
             disabled: submitting,
-            value: formData[field.field_name] || '',
+            value: currentData[field.field_name] || '',
             required: field.is_required,
             className: inputClasses
         };
@@ -313,14 +339,14 @@ export default function RegistrationPage() {
         const options = Array.isArray(field.field_options) ? field.field_options : [];
 
         if (field.field_name.startsWith('event_')) {
-            const otherSelectedEventIds = Object.entries(formData)
+            const otherSelectedEventIds = Object.entries(currentData)
                 .filter(([name, value]) => name.startsWith('event_') && name !== field.field_name && value && value !== 'none')
                 .map(([_, value]) => value);
 
             const availableEvents = events.filter(e => !otherSelectedEventIds.includes(e.id));
 
             return (
-                <Select onValueChange={v => handleInputChange(field.field_name, v)} value={formData[field.field_name]}>
+                <Select onValueChange={v => handleInputChange(field.field_name, v, memberId)} value={currentData[field.field_name]}>
                     <SelectTrigger className={inputClasses}>
                         <SelectValue placeholder={field.placeholder || "Select Event"} />
                     </SelectTrigger>
@@ -340,7 +366,7 @@ export default function RegistrationPage() {
                     <Textarea
                         {...commonProps}
                         placeholder={field.placeholder || ''}
-                        onChange={e => handleInputChange(field.field_name, e.target.value)}
+                        onChange={e => handleInputChange(field.field_name, e.target.value, memberId)}
                         className={`${inputClasses} min-h-[100px]`}
                     />
                 );
@@ -349,13 +375,13 @@ export default function RegistrationPage() {
                     <div className="space-y-3">
                         <Select
                             onValueChange={v => {
-                                handleInputChange(field.field_name, v);
+                                handleInputChange(field.field_name, v, memberId);
                                 // Reset custom other value if we switch away from Other
                                 if (field.field_name === 'department' && v !== 'Other (Please specify)') {
-                                    handleInputChange('custom_department', '');
+                                    handleInputChange('custom_department', '', memberId);
                                 }
                             }}
-                            value={formData[field.field_name]}
+                            value={currentData[field.field_name]}
                         >
                             <SelectTrigger className={inputClasses}>
                                 <SelectValue placeholder={field.placeholder || "Select option"} />
@@ -368,12 +394,12 @@ export default function RegistrationPage() {
                         </Select>
 
                         {/* Custom Input for "Other" Department */}
-                        {field.field_name === 'department' && formData[field.field_name] === 'Other (Please specify)' && (
+                        {field.field_name === 'department' && currentData[field.field_name] === 'Other (Please specify)' && (
                             <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                                 <Input
                                     placeholder="Please specify your department"
-                                    value={formData['custom_department'] || ''}
-                                    onChange={e => handleInputChange('custom_department', e.target.value)}
+                                    value={currentData['custom_department'] || ''}
+                                    onChange={e => handleInputChange('custom_department', e.target.value, memberId)}
                                     className={`${inputClasses} border-cyan-400/30 bg-cyan-400/5`}
                                     required
                                 />
@@ -389,19 +415,19 @@ export default function RegistrationPage() {
                             {options.map((opt: string) => (
                                 <div key={opt} className="flex items-center gap-3 p-2 rounded-md hover:bg-[#1a0f2e]/50 transition-colors">
                                     <Checkbox
-                                        id={`${field.field_name}-${opt}`}
-                                        checked={(Array.isArray(formData[field.field_name]) ? formData[field.field_name] : []).includes(opt)}
+                                        id={memberId ? `${memberId}-${field.field_name}-${opt}` : `${field.field_name}-${opt}`}
+                                        checked={(Array.isArray(currentData[field.field_name]) ? currentData[field.field_name] : []).includes(opt)}
                                         onCheckedChange={(checked) => {
-                                            const currentRefs = Array.isArray(formData[field.field_name]) ? [...formData[field.field_name]] : [];
+                                            const currentRefs = Array.isArray(currentData[field.field_name]) ? [...currentData[field.field_name]] : [];
                                             if (checked) {
-                                                handleInputChange(field.field_name, [...currentRefs, opt]);
+                                                handleInputChange(field.field_name, [...currentRefs, opt], memberId);
                                             } else {
-                                                handleInputChange(field.field_name, currentRefs.filter(v => v !== opt));
+                                                handleInputChange(field.field_name, currentRefs.filter(v => v !== opt), memberId);
                                             }
                                         }}
                                         className="border-purple-500/50 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
                                     />
-                                    <label htmlFor={`${field.field_name}-${opt}`} className="text-sm text-gray-300 cursor-pointer">{opt}</label>
+                                    <label htmlFor={memberId ? `${memberId}-${field.field_name}-${opt}` : `${field.field_name}-${opt}`} className="text-sm text-gray-300 cursor-pointer">{opt}</label>
                                 </div>
                             ))}
                         </div>
@@ -410,26 +436,26 @@ export default function RegistrationPage() {
                     return (
                         <div className="flex items-center gap-3 bg-[#1a0f2e]/30 p-4 rounded-lg border border-purple-500/20 hover:bg-[#1a0f2e]/50 transition-colors">
                             <Checkbox
-                                id={field.field_name}
-                                checked={!!formData[field.field_name]}
-                                onCheckedChange={c => handleInputChange(field.field_name, c)}
+                                id={memberId ? `${memberId}-${field.field_name}` : field.field_name}
+                                checked={!!currentData[field.field_name]}
+                                onCheckedChange={c => handleInputChange(field.field_name, c, memberId)}
                                 className="border-purple-500/50 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
                             />
-                            <label htmlFor={field.field_name} className="text-sm text-gray-300 cursor-pointer">{field.placeholder || "Yes"}</label>
+                            <label htmlFor={memberId ? `${memberId}-${field.field_name}` : field.field_name} className="text-sm text-gray-300 cursor-pointer">{field.placeholder || "Yes"}</label>
                         </div>
                     );
                 }
             case 'radio':
                 return (
                     <RadioGroup
-                        value={formData[field.field_name] || ''}
-                        onValueChange={v => handleInputChange(field.field_name, v)}
+                        value={currentData[field.field_name] || ''}
+                        onValueChange={v => handleInputChange(field.field_name, v, memberId)}
                         className="flex flex-col gap-2.5 bg-[#1a0f2e]/30 p-4 rounded-lg border border-purple-500/20"
                     >
                         {options.map((opt: string) => (
                             <div key={opt} className="flex items-center gap-3 p-2 rounded-md hover:bg-[#1a0f2e]/50 transition-colors">
-                                <RadioGroupItem value={opt} id={`${field.field_name}-${opt}`} className="border-purple-500/50 text-cyan-400" />
-                                <Label htmlFor={`${field.field_name}-${opt}`} className="text-gray-300 cursor-pointer">{opt}</Label>
+                                <RadioGroupItem value={opt} id={memberId ? `${memberId}-${field.field_name}-${opt}` : `${field.field_name}-${opt}`} className="border-purple-500/50 text-cyan-400" />
+                                <Label htmlFor={memberId ? `${memberId}-${field.field_name}-${opt}` : `${field.field_name}-${opt}`} className="text-gray-300 cursor-pointer">{opt}</Label>
                             </div>
                         ))}
                     </RadioGroup>
@@ -439,7 +465,7 @@ export default function RegistrationPage() {
                     <div className="flex flex-col gap-2">
                         <Input
                             type="file"
-                            id={field.field_name}
+                            id={memberId ? `${memberId}-${field.field_name}` : field.field_name}
                             disabled={submitting}
                             required={field.is_required}
                             onChange={(e) => {
@@ -451,14 +477,14 @@ export default function RegistrationPage() {
                                         e.target.value = '';
                                         return;
                                     }
-                                    handleInputChange(field.field_name, file);
+                                    handleInputChange(field.field_name, file, memberId);
                                 }
                             }}
                             className={`${inputClasses} py-2 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer`}
                         />
-                        {formData[field.field_name] instanceof File && (
+                        {currentData[field.field_name] instanceof File && (
                             <p className="text-xs text-cyan-400 font-medium">
-                                Selected: {formData[field.field_name].name}
+                                Selected: {currentData[field.field_name].name}
                             </p>
                         )}
                     </div>
@@ -469,7 +495,7 @@ export default function RegistrationPage() {
                         {...commonProps}
                         type={field.field_type}
                         placeholder={field.placeholder || ''}
-                        onChange={e => handleInputChange(field.field_name, e.target.value)}
+                        onChange={e => handleInputChange(field.field_name, e.target.value, memberId)}
                     />
                 );
         }
@@ -625,19 +651,90 @@ export default function RegistrationPage() {
                 </CardHeader>
 
                 <CardContent className="p-8 sm:p-10 pt-4 bg-[#130d1e] rounded-b-2xl">
-                    <form onSubmit={handleSubmit} className="space-y-5">
-                        {fields.map(field => (
-                            <div key={field.id} className="space-y-2">
-                                <Label htmlFor={field.field_name} className="text-sm font-medium text-gray-300">
-                                    {field.field_label}
-                                    {field.is_required && <span className="text-fuchsia-400 ml-1">*</span>}
+                    <form onSubmit={handleSubmit} className="space-y-10">
+                        {organization.team_events_enabled && (
+                            <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-500">
+                                <Label htmlFor="team_name" className="text-sm font-medium text-gray-300">
+                                    Team Name <span className="text-fuchsia-400">*</span>
                                 </Label>
-                                {renderField(field)}
-                                {field.help_text && (
-                                    <p className="text-xs text-gray-500 ml-1">{field.help_text}</p>
-                                )}
+                                <Input
+                                    id="team_name"
+                                    placeholder="Enter your team name (e.g. Code Wizards)"
+                                    value={teamName}
+                                    onChange={e => setTeamName(e.target.value)}
+                                    className="bg-[#1a0f2e]/50 border border-purple-500/20 text-white placeholder:text-gray-500 focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/20 rounded-lg transition-all duration-200 hover:bg-[#1a0f2e]/70 hover:border-purple-500/30 h-11 px-4"
+                                    required
+                                />
                             </div>
-                        ))}
+                        )}
+
+                        <div className="space-y-8">
+                            {organization.team_events_enabled ? (
+                                members.map((member, index) => (
+                                    <div key={member.id} className="relative p-6 bg-[#1a0f2e]/30 border border-purple-500/20 rounded-xl space-y-5 animate-in fade-in slide-in-from-left-4 duration-300">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h4 className="text-md font-bold text-purple-300 flex items-center gap-2">
+                                                <span className="w-6 h-6 bg-purple-500 text-white text-[10px] rounded-full flex items-center justify-center">{index + 1}</span>
+                                                Member Details {index === 0 && "(Lead)"}
+                                            </h4>
+                                            {index > 0 && (
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    onClick={() => removeMember(member.id)}
+                                                    className="h-8 text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs px-2"
+                                                >
+                                                    Remove
+                                                </Button>
+                                            )}
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                            {fields
+                                                .filter(field => {
+                                                    // If team mode, hide event fields for non-lead members
+                                                    if (index > 0 && (field.field_name.startsWith('event_') || field.field_name.includes('event'))) {
+                                                        return false;
+                                                    }
+                                                    return true;
+                                                })
+                                                .map(field => (
+                                                    <div key={`${member.id}-${field.id}`} className="space-y-2">
+                                                        <Label htmlFor={`${member.id}-${field.field_name}`} className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                                                            {field.field_label}
+                                                            {field.is_required && <span className="text-fuchsia-400 ml-1">*</span>}
+                                                        </Label>
+                                                        {renderField(field, member.id)}
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                fields.map(field => (
+                                    <div key={field.id} className="space-y-2">
+                                        <Label htmlFor={field.field_name} className="text-sm font-medium text-gray-300">
+                                            {field.field_label}
+                                            {field.is_required && <span className="text-fuchsia-400 ml-1">*</span>}
+                                        </Label>
+                                        {renderField(field)}
+                                        {field.help_text && (
+                                            <p className="text-xs text-gray-500 ml-1">{field.help_text}</p>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+
+                            {organization.team_events_enabled && (
+                                <Button
+                                    type="button"
+                                    onClick={addMember}
+                                    variant="outline"
+                                    className="w-full border-dashed border-purple-500/30 bg-purple-500/5 text-purple-300 hover:bg-purple-500/10 h-12"
+                                >
+                                    + Add Team Member
+                                </Button>
+                            )}
+                        </div>
 
                         <div className="pt-6">
                             <Button
@@ -648,14 +745,14 @@ export default function RegistrationPage() {
                                 {submitting ? (
                                     <div className="flex items-center justify-center gap-2">
                                         <Loader2 className="h-5 w-5 animate-spin" />
-                                        <span>Processing Registration...</span>
+                                        <span>Processing {members.length > 1 ? `${members.length} Registrations...` : 'Registration...'}</span>
                                     </div>
                                 ) : (
-                                    'Submit Registration'
+                                    organization.team_events_enabled ? 'Submit Team Registration' : 'Submit Registration'
                                 )}
                             </Button>
                             <p className="text-center text-xs text-gray-500 mt-4">
-                                Your information is secure and confidential
+                                Every member will receive a unique ticket via email
                             </p>
                         </div>
                     </form>

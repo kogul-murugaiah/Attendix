@@ -49,7 +49,8 @@ export default function ParticipantsTab() {
         department: '',
         year_of_study: '',
         // Dynamic event IDs will be handled via index access or spread
-        participant_code: ''
+        participant_code: '',
+        team_name: ''
     })
     // We'll use a dynamic object for events in editFormData now
     const [dynamicEventIds, setDynamicEventIds] = useState<Record<string, string | null>>({})
@@ -255,7 +256,8 @@ export default function ParticipantsTab() {
             college: customData.college_name || customData.college || participant.college || '',
             department: customData.department || participant.department || '',
             year_of_study: customData.year_of_study || participant.year_of_study || '',
-            participant_code: participant.participant_code || participant.qr_code || ''
+            participant_code: participant.participant_code || participant.qr_code || '',
+            team_name: participant.team_name || ''
         })
         setEditOpen(true)
     }
@@ -287,6 +289,7 @@ export default function ParticipantsTab() {
                 full_name: editFormData.name,
                 email: editFormData.email,
                 phone: editFormData.phone,
+                team_name: editFormData.team_name || null,
                 // Update custom_data with merged fields
                 custom_data: updatedCustomData,
                 // Update primary event_id (use first selected event as main)
@@ -355,7 +358,8 @@ export default function ParticipantsTab() {
 
     const filteredParticipants = participants.filter(p =>
         (p.full_name || p.name || '').toLowerCase().includes(search.toLowerCase()) ||
-        (p.participant_code || p.qr_code || '').toLowerCase().includes(search.toLowerCase())
+        (p.participant_code || p.qr_code || '').toLowerCase().includes(search.toLowerCase()) ||
+        (p.team_name || '').toLowerCase().includes(search.toLowerCase())
     )
 
     // Initial Fetch
@@ -472,6 +476,9 @@ export default function ParticipantsTab() {
                             <TableRow className="border-white/5 hover:bg-transparent">
                                 <TableHead className="text-gray-400 font-medium">Code</TableHead>
                                 <TableHead className="text-gray-400 font-medium">Name</TableHead>
+                                {organization?.team_events_enabled && (
+                                    <TableHead className="text-gray-400 font-medium">Team Name</TableHead>
+                                )}
                                 <TableHead className="text-gray-400 font-medium">College / Dept</TableHead>
                                 <TableHead className="text-gray-400 font-medium">Phone</TableHead>
                                 <TableHead className="text-gray-400 font-medium">Events</TableHead>
@@ -495,9 +502,14 @@ export default function ParticipantsTab() {
                                     <TableCell className="font-medium text-white">
                                         <div className="flex flex-col">
                                             <span>{participant.full_name || participant.name}</span>
-                                            <span className="text-xs text-gray-500">{participant.email}</span>
+                                            <span className="text-gray-500 text-[10px] font-normal lowercase">{participant.email}</span>
                                         </div>
                                     </TableCell>
+                                    {organization?.team_events_enabled && (
+                                        <TableCell className="text-cyan-400 font-bold text-xs uppercase tracking-wider">
+                                            {participant.team_name || '-'}
+                                        </TableCell>
+                                    )}
                                     <TableCell className="text-gray-400">
                                         <div className="flex flex-col text-xs">
                                             <span>{participant.custom_data?.college_name || participant.college || '-'}</span>
@@ -625,6 +637,11 @@ export default function ParticipantsTab() {
                         <div className="space-y-2">
                             <Label className="text-gray-400 text-xs uppercase tracking-wider font-medium">Email</Label>
                             <Input required value={editFormData.email} onChange={e => setEditFormData({ ...editFormData, email: e.target.value })} className="bg-black/50 border-white/10 text-white focus:border-purple-500/50 focus:ring-purple-500/20 rounded-xl" />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label className="text-gray-400 text-xs uppercase tracking-wider font-medium">Team Name</Label>
+                            <Input value={editFormData.team_name} onChange={e => setEditFormData({ ...editFormData, team_name: e.target.value })} className="bg-black/50 border-white/10 text-white focus:border-purple-500/50 focus:ring-purple-500/20 rounded-xl" placeholder="No Team" />
                         </div>
 
                         <div className="space-y-2">

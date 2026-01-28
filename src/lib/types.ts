@@ -16,7 +16,8 @@ export type Organization = {
     max_events: number
     max_participants_per_event: number
     max_staff: number
-    features?: Record<string, boolean> | null
+    max_team_members?: number
+    team_events_enabled: boolean
     registration_open: boolean
     email_template?: string | null
     created_at: string
@@ -60,9 +61,8 @@ export type Participant = {
     college_name?: string | null
     department?: string
     year_of_study?: string
-    event1_id?: string | null
-    event2_id?: string | null
-    event3_id?: string | null
+    team_name?: string | null
+    registration_group_id?: string | null
     custom_data?: Record<string, any>
     status?: 'pending' | 'approved' | 'rejected' | 'cancelled'
     qr_code_url?: string | null

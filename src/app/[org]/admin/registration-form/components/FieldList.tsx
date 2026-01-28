@@ -30,7 +30,7 @@ export default function FieldList({ fields, onEdit, onDelete, onMove }: FieldLis
                                     size="icon"
                                     className="h-7 w-7 rounded-lg hover:text-white hover:bg-white/10 disabled:opacity-10"
                                     onClick={() => onMove(field.id, 'up')}
-                                    disabled={index === 0}
+                                    disabled={index === 0 || field.id.startsWith('virtual-')}
                                 >
                                     <ArrowUp className="w-3.5 h-3.5" />
                                 </Button>
@@ -39,7 +39,7 @@ export default function FieldList({ fields, onEdit, onDelete, onMove }: FieldLis
                                     size="icon"
                                     className="h-7 w-7 rounded-lg hover:text-white hover:bg-white/10 disabled:opacity-10"
                                     onClick={() => onMove(field.id, 'down')}
-                                    disabled={index === sortedFields.length - 1}
+                                    disabled={index === sortedFields.length - 1 || field.id.startsWith('virtual-')}
                                 >
                                     <ArrowDown className="w-3.5 h-3.5" />
                                 </Button>
@@ -57,6 +57,12 @@ export default function FieldList({ fields, onEdit, onDelete, onMove }: FieldLis
                                 </div>
                                 <div className="text-xs text-gray-500 flex items-center gap-2 font-medium">
                                     <span className="uppercase tracking-wider text-[10px] bg-white/5 px-1.5 py-0.5 rounded text-gray-400 border border-white/5">{field.field_type}</span>
+                                    {field.help_text && (
+                                        <>
+                                            <span className="text-gray-700 mx-1">•</span>
+                                            <span className="text-gray-500 italic">{field.help_text}</span>
+                                        </>
+                                    )}
                                     <span className="text-gray-700 mx-1">•</span>
                                     <span className="font-mono opacity-50 text-[10px]">{field.field_name}</span>
                                 </div>
@@ -64,17 +70,19 @@ export default function FieldList({ fields, onEdit, onDelete, onMove }: FieldLis
                         </div>
 
                         <div className="flex items-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-300 translate-x-2 sm:translate-x-4 sm:group-hover:translate-x-0">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => onEdit(field)}
-                                className="h-9 px-4 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg border border-transparent hover:border-white/10"
-                            >
-                                <Pencil className="w-4 h-4 mr-2" />
-                                Edit
-                            </Button>
+                            {!field.id.startsWith('virtual-') && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => onEdit(field)}
+                                    className="h-9 px-4 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg border border-transparent hover:border-white/10"
+                                >
+                                    <Pencil className="w-4 h-4 mr-2" />
+                                    Edit
+                                </Button>
+                            )}
 
-                            {!field.is_locked && (
+                            {!field.is_locked && !field.id.startsWith('virtual-') && (
                                 <Button
                                     variant="ghost"
                                     size="sm"

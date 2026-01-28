@@ -105,7 +105,7 @@ export default function AttendanceManager() {
         if (!organization) return
         let query = supabase.from('student_registrations').select('*, event_registrations(*)').eq('organization_id', organization.id).order('created_at', { ascending: false })
         if (search) {
-            query = query.or(`full_name.ilike.%${search}%,participant_code.ilike.%${search}%`)
+            query = query.or(`full_name.ilike.%${search}%,participant_code.ilike.%${search}%,team_name.ilike.%${search}%`)
         }
         query = query.limit(50)
 
@@ -130,7 +130,8 @@ export default function AttendanceManager() {
                 })),
                 created_at: r.created_at,
                 custom_data: r.custom_data,
-                status: r.status
+                status: r.status,
+                team_name: r.team_name
             }))
             setParticipants(mappedParticipants)
         }
@@ -302,6 +303,9 @@ export default function AttendanceManager() {
                         <TableHeader className="bg-white/5 border-b border-white/5">
                             <TableRow className="border-white/5 hover:bg-transparent">
                                 <TableHead className="text-gray-400 font-medium w-[200px]">Participant</TableHead>
+                                {organization?.team_events_enabled && (
+                                    <TableHead className="text-gray-400 font-medium w-[150px]">Team</TableHead>
+                                )}
                                 <TableHead className="text-gray-400 font-medium text-center w-[160px]">Reception</TableHead>
                                 {events.map(event => (
                                     <TableHead key={event.id} className="text-gray-400 font-medium text-center min-w-[140px]">
@@ -319,6 +323,11 @@ export default function AttendanceManager() {
                                             <span className="text-xs text-purple-400 font-mono">{p.participant_code}</span>
                                         </div>
                                     </TableCell>
+                                    {organization?.team_events_enabled && (
+                                        <TableCell>
+                                            <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider">{p.team_name || '-'}</span>
+                                        </TableCell>
+                                    )}
                                     <TableCell className="p-2">
                                         <StatusBadge
                                             label="Reception"

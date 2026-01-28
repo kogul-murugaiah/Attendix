@@ -15,19 +15,22 @@ Built with **Next.js 16**, **Supabase**, and **Tailwind CSS**.
 
 ### 📝 Smart Registration System
 - **Public Registration Portal**: Customizable public-facing pages for student registration (`/[org]/register`).
-- **Dynamic Forms**: Support for collecting student details (College, Dept, Year) and Event Preferences.
+- **Team Registration Support**: Support for "Individual-First" team events. Groups can register together with a shared team name while maintaining individual participant records.
+- **Dynamic Forms**: Support for custom fields (College, Dept, Year) and Event Preferences with dropdown/other logic.
 - **Instant QR Generation**: Automatically generates a unique, signed QR code for every participant upon registration.
-- **Registration Control**: Admins can open/close registrations for specific events or platforms in real-time.
-*   **Public Registration Portal**: Customizable public-facing pages for student registration (`/[org]/register`).
-*   **Dynamic Forms**: Support for collecting student details (College, Dept, Year) and Event Preferences.
-*   **Instant QR Generation**: Automatically generates a unique, signed QR code for every participant upon registration.
-*   **Sequential ID Assignment**: Smart trigger-based generation of participant IDs (e.g., `XPL-001`, `XPL-002`) based on organization prefixes.
+- **Registration Control**: Admins can open/close registrations and toggle team mode in real-time.
+- **Sequential ID Assignment**: Smart trigger-based generation of participant IDs (e.g., `XPL-001`, `XPL-002`).
 
 ### ⚡ Real-Time Dashboards (WebSockets)
 - **Global Broadcast System**: A custom architecture using Supabase Channels to ensure **instant** data synchronization across all devices.
-- **Reception Console**: Real-time view of total registrations, gate check-in counts, and pending arrivals. Updates instantly when a student registers or enters.
-- **Admin Dashboard**: Live feed of participants, improved real-time "Attendance" & "Participants" tabs that reflect changes without refreshing.
-- **Real-time Scan Logs**: Activity feed showing instant check-in logs with student details and timestamps across all scanning stations.
+- **Reception Console**: Real-time view of total registrations, gate check-in counts, and pending arrivals.
+- **Admin Dashboard**: Live feed of participants, improved real-time "Attendance" & "Participants" tabs.
+- **Real-time Scan Logs**: Activity feed showing instant check-in logs with student details and timestamps.
+
+### 🎨 Branding & UI/UX
+- **Organization Watermarks**: Dynamic, large-scale background watermarks that display the organization's name across all staff and admin dashboards.
+- **Enhanced Participant UI**: Detailed views including email sub-text and team membership status.
+- **Smart Form Editor Preview**: Real-time admin preview showing exactly what students will see, including locked system fields like Team Name.
 
 ### 📱 QR Scanning & Attendance
 *   **Gate Management**: Dedicated "Reception Console" for scanning tickets at the main entrance. Validates entry status and timestamps.

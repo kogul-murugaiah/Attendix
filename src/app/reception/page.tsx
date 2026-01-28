@@ -37,6 +37,7 @@ export default function ReceptionDashboard() {
     const router = useRouter()
 
     // --- State ---
+    const [organization, setOrganization] = useState<{ name: string } | null>(null)
     const [organizationId, setOrganizationId] = useState<string | null>(null)
     const [stats, setStats] = useState({
         registered: 0,
@@ -136,6 +137,14 @@ export default function ReceptionDashboard() {
         if (orgId) {
             setOrganizationId(orgId)
             fetchData(orgId)
+
+            // Fetch Organization details for Branding
+            const { data: orgData } = await supabase
+                .from('organizations')
+                .select('name')
+                .eq('id', orgId)
+                .single()
+            if (orgData) setOrganization(orgData)
         } else {
             toast.error("No linked organization found for this user.")
         }
@@ -168,9 +177,9 @@ export default function ReceptionDashboard() {
                 gate_entry_timestamp: r.checked_in_at,
                 college: r.college,
                 department: r.department,
-                year_of_study: r.year_of_study,
-                custom_data: r.custom_data,
                 created_at: r.created_at,
+                team_name: r.team_name,
+                // - [/] Update Admin Form Preview to show team-specific fields when enabled
                 events: [] // Default to empty array as reception view doesn't render event specific details yet
             }))
             setParticipants(mapped)
@@ -204,6 +213,7 @@ export default function ReceptionDashboard() {
                 p.name?.toLowerCase().includes(query) ||
                 p.participant_code?.toLowerCase().includes(query) ||
                 p.college?.toLowerCase().includes(query) ||
+                p.team_name?.toLowerCase().includes(query) ||
                 p.phone?.includes(query)
             )
         }
@@ -301,6 +311,7 @@ export default function ReceptionDashboard() {
                 gate_entry_status: userData.checked_in,
                 organization_id: userData.organization_id,
                 created_at: userData.created_at,
+                team_name: userData.team_name,
                 events: []
             }
 
@@ -409,9 +420,16 @@ export default function ReceptionDashboard() {
     return (
         <div className="min-h-screen bg-[#0a0a0f] text-white font-sans selection:bg-purple-500/30">
             {/* Background Gradients */}
-            <div className="fixed inset-0 pointer-events-none">
+            <div className="fixed inset-0 pointer-events-none overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-purple-900/10 to-transparent"></div>
                 <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-purple-600/5 rounded-full blur-[120px]"></div>
+
+                {/* Watermark */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] select-none">
+                    <h1 className="text-[15vw] font-black uppercase tracking-tighter -rotate-12 whitespace-nowrap">
+                        {organization?.name}
+                    </h1>
+                </div>
             </div>
 
             <div className="relative z-10 container mx-auto p-6 space-y-8">
@@ -514,6 +532,7 @@ export default function ReceptionDashboard() {
                             <TableHeader className="bg-white/5">
                                 <TableRow className="border-white/5 hover:bg-transparent">
                                     <TableHead className="text-gray-400">Participant</TableHead>
+                                    <TableHead className="text-gray-400">Team</TableHead>
                                     <TableHead className="text-gray-400">Code</TableHead>
                                     <TableHead className="text-gray-400">College</TableHead>
                                     <TableHead className="text-gray-400">Mobile</TableHead>
@@ -534,6 +553,9 @@ export default function ReceptionDashboard() {
                                             <TableCell>
                                                 <div className="font-medium text-white">{p.name}</div>
                                                 <div className="text-xs text-gray-500">{p.email}</div>
+                                            </TableCell>
+                                            <TableCell className="text-cyan-400 font-bold text-xs uppercase tabular-nums">
+                                                {p.team_name || '-'}
                                             </TableCell>
                                             <TableCell className="font-mono text-xs text-purple-300 bg-purple-500/10 px-2 py-1 rounded w-fit h-fit">
                                                 {p.participant_code}
@@ -584,79 +606,86 @@ export default function ReceptionDashboard() {
             </div>
 
             {/* --- 4. QR Scanner Modal --- */}
-            {showScanner && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div className="bg-[#13131a] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-cyan-500"></div>
+            {
+                showScanner && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                        <div className="bg-[#13131a] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-cyan-500"></div>
 
-                        <div className="p-4 flex justify-between items-center border-b border-white/5">
-                            <h3 className="font-bold text-lg flex items-center gap-2">
-                                <Camera className="w-5 h-5 text-purple-400" /> Scan Entry QR
-                            </h3>
-                            <Button variant="ghost" size="icon" onClick={() => setShowScanner(false)} className="text-gray-400 hover:text-white">
-                                <X className="w-5 h-5" />
-                            </Button>
-                        </div>
-
-                        <div className="p-6 flex-1 overflow-y-auto">
-                            <div className="relative rounded-2xl overflow-hidden border-2 border-white/10 shadow-inner bg-black aspect-square mb-6">
-                                <QRScanner onScan={handleScan} />
-                                {/* Overlay Styling */}
-                                <div className="absolute inset-0 border-[40px] border-black/50 pointer-events-none"></div>
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                    <div className="w-48 h-48 border-2 border-purple-500/50 rounded-lg relative">
-                                        <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-purple-400"></div>
-                                        <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-purple-400"></div>
-                                        <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-purple-400"></div>
-                                        <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-purple-400"></div>
-                                    </div>
-                                </div>
+                            <div className="p-4 flex justify-between items-center border-b border-white/5">
+                                <h3 className="font-bold text-lg flex items-center gap-2">
+                                    <Camera className="w-5 h-5 text-purple-400" /> Scan Entry QR
+                                </h3>
+                                <Button variant="ghost" size="icon" onClick={() => setShowScanner(false)} className="text-gray-400 hover:text-white">
+                                    <X className="w-5 h-5" />
+                                </Button>
                             </div>
 
-                            {/* Scan Result/Status */}
-                            {scanResult && (
-                                <div className={`p-4 rounded-xl mb-4 border ${scanResult.status === 'success'
-                                    ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                                    : 'bg-red-500/10 border-red-500/30 text-red-400'
-                                    }`}>
-                                    <div className="flex items-center gap-3">
-                                        {scanResult.status === 'success' ? <CheckCircle className="w-6 h-6" /> : <XCircle className="w-6 h-6" />}
-                                        <div>
-                                            <p className="font-bold text-lg">{scanResult.message}</p>
-                                            {scanResult.participant && (
-                                                <div className="text-sm opacity-80 mt-1">
-                                                    {scanResult.participant.name} ({scanResult.participant.participant_code})
-                                                </div>
-                                            )}
+                            <div className="p-6 flex-1 overflow-y-auto">
+                                <div className="relative rounded-2xl overflow-hidden border-2 border-white/10 shadow-inner bg-black aspect-square mb-6">
+                                    <QRScanner onScan={handleScan} />
+                                    {/* Overlay Styling */}
+                                    <div className="absolute inset-0 border-[40px] border-black/50 pointer-events-none"></div>
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                        <div className="w-48 h-48 border-2 border-purple-500/50 rounded-lg relative">
+                                            <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-purple-400"></div>
+                                            <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-purple-400"></div>
+                                            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-purple-400"></div>
+                                            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-purple-400"></div>
                                         </div>
                                     </div>
                                 </div>
-                            )}
 
-                            <div id="reader-placeholder" className="hidden"></div>
-                            <div className="space-y-4">
-                                <Button
-                                    onClick={() => document.getElementById('qr-upload')?.click()}
-                                    variant="outline"
-                                    className="w-full border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-xl h-12 flex items-center justify-center gap-2"
-                                    disabled={processing}
-                                >
-                                    <Upload className="w-4 h-4 text-purple-400" />
-                                    <span>Upload QR Image</span>
-                                </Button>
-                                <input
-                                    id="qr-upload"
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={handleFileUpload}
-                                />
+                                {/* Scan Result/Status */}
+                                {scanResult && (
+                                    <div className={`p-4 rounded-xl mb-4 border ${scanResult.status === 'success'
+                                        ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                                        : 'bg-red-500/10 border-red-500/30 text-red-400'
+                                        }`}>
+                                        <div className="flex items-center gap-3">
+                                            {scanResult.status === 'success' ? <CheckCircle className="w-6 h-6" /> : <XCircle className="w-6 h-6" />}
+                                            <div>
+                                                <p className="font-bold text-lg">{scanResult?.message}</p>
+                                                {scanResult?.participant && (
+                                                    <div className="text-sm opacity-80 mt-1">
+                                                        {scanResult.participant.name} ({scanResult.participant.participant_code})
+                                                        {scanResult.participant.team_name && (
+                                                            <div className="text-cyan-400 font-bold uppercase text-[10px] mt-0.5">
+                                                                Team: {scanResult.participant.team_name}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div id="reader-placeholder" className="hidden"></div>
+                                <div className="space-y-4">
+                                    <Button
+                                        onClick={() => document.getElementById('qr-upload')?.click()}
+                                        variant="outline"
+                                        className="w-full border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-xl h-12 flex items-center justify-center gap-2"
+                                        disabled={processing}
+                                    >
+                                        <Upload className="w-4 h-4 text-purple-400" />
+                                        <span>Upload QR Image</span>
+                                    </Button>
+                                    <input
+                                        id="qr-upload"
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={handleFileUpload}
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     )
 }
 

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,11 +13,25 @@ import Image from "next/image"
 import { Eye, EyeOff } from "lucide-react"
 
 export default function LoginPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
+            </div>
+        }>
+            <LoginForm />
+        </Suspense>
+    )
+}
+
+function LoginForm() {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
     const router = useRouter()
+    const searchParams = useSearchParams()
+    const next = searchParams.get('next')
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -37,6 +51,12 @@ export default function LoginPage() {
             const { user } = data;
             if (!user) {
                 toast.error('Login successful, but user data not found.')
+                return
+            }
+
+            // Priority: next parameter
+            if (next) {
+                router.push(next)
                 return
             }
 
@@ -179,7 +199,7 @@ export default function LoginPage() {
 
                         <div className="text-center text-sm text-gray-400">
                             Don't have an account?{' '}
-                            <Link href="/register" className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">
+                            <Link href={`/register${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">
                                 Sign Up
                             </Link>
                         </div>

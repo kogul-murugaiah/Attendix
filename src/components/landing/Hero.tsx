@@ -31,7 +31,7 @@ export function Hero() {
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8">
-                    <Link href="/onboarding">
+                    <Link href="/register?next=/onboarding">
                         <Button size="lg" className="h-14 px-8 text-lg rounded-full bg-white text-black hover:bg-gray-200 transition-all hover:scale-105 shadow-[0_0_50px_-10px_rgba(255,255,255,0.3)] font-medium">
                             Create Your Organization
                             <ArrowRight className="ml-2 w-5 h-5" />

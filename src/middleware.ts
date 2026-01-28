@@ -16,7 +16,9 @@ export async function middleware(req: NextRequest) {
     }
 
     if (path === '/onboarding' && !session) {
-        return NextResponse.redirect(new URL('/login', req.url))
+        const redirectUrl = new URL('/login', req.url)
+        redirectUrl.searchParams.set('next', '/onboarding')
+        return NextResponse.redirect(redirectUrl)
     }
 
     const segments = path.split('/').filter(Boolean);
@@ -25,7 +27,9 @@ export async function middleware(req: NextRequest) {
     // Super Admin Routes
     if (path.startsWith('/super-admin')) {
         if (!session) {
-            return NextResponse.redirect(new URL('/login', req.url))
+            const redirectUrl = new URL('/login', req.url)
+            redirectUrl.searchParams.set('next', path)
+            return NextResponse.redirect(redirectUrl)
         }
 
         const { data: isSuperAdmin } = await supabase
@@ -47,7 +51,9 @@ export async function middleware(req: NextRequest) {
         // Admin Routes protection
         if (path.includes('/admin')) {
             if (!session) {
-                return NextResponse.redirect(new URL('/login', req.url))
+                const redirectUrl = new URL('/login', req.url)
+                redirectUrl.searchParams.set('next', path)
+                return NextResponse.redirect(redirectUrl)
             }
             return response;
         }
@@ -55,7 +61,9 @@ export async function middleware(req: NextRequest) {
         // Staff Scanner Routes protection
         if (path.includes('/scanner') || path.includes('/gate-scanner')) {
             if (!session) {
-                return NextResponse.redirect(new URL('/login', req.url))
+                const redirectUrl = new URL('/login', req.url)
+                redirectUrl.searchParams.set('next', path)
+                return NextResponse.redirect(redirectUrl)
             }
             return response;
         }

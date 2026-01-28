@@ -34,7 +34,7 @@ export function Navbar() {
                         <Link href="/login">
                             <Button variant="ghost" className="text-gray-300 hover:text-white hover:bg-white/5">Login</Button>
                         </Link>
-                        <Link href="/register">
+                        <Link href="/register?next=/onboarding">
                             <Button className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 border-0 rounded-full px-6 transition-all hover:shadow-lg hover:shadow-purple-500/20">
                                 Get Started
                             </Button>

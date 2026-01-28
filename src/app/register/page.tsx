@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,18 +13,32 @@ import Image from "next/image";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function SignUpPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
+            </div>
+        }>
+            <SignUpForm />
+        </Suspense>
+    )
+}
+
+function SignUpForm() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const next = searchParams.get('next');
 
     useEffect(() => {
         const checkSession = async () => {
             // ... existing logic (restored)
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
-                router.replace('/onboarding');
+                router.replace(next || '/onboarding');
             }
         }
         checkSession();
@@ -63,9 +77,9 @@ export default function SignUpPage() {
                 });
 
                 if (!signInError) {
-                    router.push('/onboarding');
+                    router.push(next || '/onboarding');
                 } else {
-                    router.push('/login');
+                    router.push(`/login${next ? `?next=${encodeURIComponent(next)}` : ''}`);
                 }
             }
         } catch (err: any) {
@@ -148,7 +162,7 @@ export default function SignUpPage() {
                         </Button>
                         <div className="text-center text-sm text-gray-400">
                             Already have an account?{' '}
-                            <Link href="/login" className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">
+                            <Link href={`/login${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">
                                 Log in
                             </Link>
                         </div>

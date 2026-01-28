@@ -20,6 +20,7 @@ export type Organization = {
     team_events_enabled: boolean
     registration_open: boolean
     email_template?: string | null
+    features?: Record<string, boolean>
     created_at: string
 }
 

@@ -43,39 +43,45 @@ export async function POST(req: NextRequest) {
                 .eq('participant_id', participantId);
 
             if (regEvents && regEvents.length > 0) {
-                const eventList = regEvents.map((re: any) => re.events.event_name);
-                const firstEvent = regEvents[0].events;
+                const eventList = regEvents.map((re: any) => {
+                    const e = Array.isArray(re.events) ? re.events[0] : re.events;
+                    return e?.event_name;
+                }).filter(Boolean);
 
-                // Format Date & Time
-                const eventDate = new Date(firstEvent.event_datetime).toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                });
-                const eventTime = new Date(firstEvent.event_datetime).toLocaleTimeString('en-US', {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
+                const firstEventData = Array.isArray(regEvents[0].events) ? regEvents[0].events[0] : regEvents[0].events;
 
-                eventDetailsHTML = `
-                    <div style="margin: 24px 0; padding: 20px; background-color: #f9fafb; border-radius: 12px; border: 1px solid #e5e7eb;">
-                        <p style="margin: 0 0 10px 0; font-size: 14px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Registered Events</p>
-                        <ul style="margin: 0; padding: 0; list-style-type: none;">
-                            ${eventList.map((name: string) => `<li style="margin-bottom: 6px; color: #111827; font-weight: 500; display: flex; align-items: center;"><span style="color: #7c3aed; margin-right: 8px;">•</span> ${name}</li>`).join('')}
-                        </ul>
-                        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                            <div>
-                                <p style="margin: 0; font-size: 11px; color: #6b7280; text-transform: uppercase;">📍 Venue</p>
-                                <p style="margin: 2px 0 0 0; font-size: 14px; color: #374151; font-weight: 600;">${firstEvent.venue}</p>
-                            </div>
-                            <div>
-                                <p style="margin: 0; font-size: 11px; color: #6b7280; text-transform: uppercase;">🕒 Time</p>
-                                <p style="margin: 2px 0 0 0; font-size: 14px; color: #374151; font-weight: 600;">${eventDate} at ${eventTime}</p>
+                if (firstEventData) {
+                    // Format Date & Time
+                    const eventDate = new Date(firstEventData.event_datetime).toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    });
+                    const eventTime = new Date(firstEventData.event_datetime).toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+
+                    eventDetailsHTML = `
+                        <div style="margin: 24px 0; padding: 20px; background-color: #f9fafb; border-radius: 12px; border: 1px solid #e5e7eb;">
+                            <p style="margin: 0 0 10px 0; font-size: 14px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Registered Events</p>
+                            <ul style="margin: 0; padding: 0; list-style-type: none;">
+                                ${eventList.map((name: string) => `<li style="margin-bottom: 6px; color: #111827; font-weight: 500; display: flex; align-items: center;"><span style="color: #7c3aed; margin-right: 8px;">•</span> ${name}</li>`).join('')}
+                            </ul>
+                            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                <div>
+                                    <p style="margin: 0; font-size: 11px; color: #6b7280; text-transform: uppercase;">📍 Venue</p>
+                                    <p style="margin: 2px 0 0 0; font-size: 14px; color: #374151; font-weight: 600;">${firstEventData.venue}</p>
+                                </div>
+                                <div>
+                                    <p style="margin: 0; font-size: 11px; color: #6b7280; text-transform: uppercase;">🕒 Time</p>
+                                    <p style="margin: 2px 0 0 0; font-size: 14px; color: #374151; font-weight: 600;">${eventDate} at ${eventTime}</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                }
             }
         } catch (dbErr) {
             console.error('Error fetching event details for email:', dbErr);
@@ -184,8 +190,6 @@ export async function POST(req: NextRequest) {
             content: qrCodeBase64,
             name: `${sanitizedName}.png`,
         }]
-
-        const supabase = createAdminClient();
 
         try {
             // Send email

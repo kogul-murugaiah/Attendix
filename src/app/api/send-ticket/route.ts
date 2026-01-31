@@ -7,6 +7,8 @@ const DEFAULT_EMAIL_TEMPLATE = `Dear {name},
 
 Thank you for registering with {org_name}! We are excited to have you join us. 
 
+{event_details}
+
 Your unique participant code is:
 {code_box}
 
@@ -23,10 +25,65 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
+        const supabase = createAdminClient();
+
+        // 1. Fetch Registered Events Details
+        let eventDetailsHTML = '';
+        try {
+            const { data: regEvents, error: regError } = await supabase
+                .from('event_registrations')
+                .select(`
+                    event_id,
+                    events (
+                        event_name,
+                        venue,
+                        event_datetime
+                    )
+                `)
+                .eq('participant_id', participantId);
+
+            if (regEvents && regEvents.length > 0) {
+                const eventList = regEvents.map((re: any) => re.events.event_name);
+                const firstEvent = regEvents[0].events;
+
+                // Format Date & Time
+                const eventDate = new Date(firstEvent.event_datetime).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+                const eventTime = new Date(firstEvent.event_datetime).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                eventDetailsHTML = `
+                    <div style="margin: 24px 0; padding: 20px; background-color: #f9fafb; border-radius: 12px; border: 1px solid #e5e7eb;">
+                        <p style="margin: 0 0 10px 0; font-size: 14px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Registered Events</p>
+                        <ul style="margin: 0; padding: 0; list-style-type: none;">
+                            ${eventList.map((name: string) => `<li style="margin-bottom: 6px; color: #111827; font-weight: 500; display: flex; align-items: center;"><span style="color: #7c3aed; margin-right: 8px;">•</span> ${name}</li>`).join('')}
+                        </ul>
+                        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div>
+                                <p style="margin: 0; font-size: 11px; color: #6b7280; text-transform: uppercase;">📍 Venue</p>
+                                <p style="margin: 2px 0 0 0; font-size: 14px; color: #374151; font-weight: 600;">${firstEvent.venue}</p>
+                            </div>
+                            <div>
+                                <p style="margin: 0; font-size: 11px; color: #6b7280; text-transform: uppercase;">🕒 Time</p>
+                                <p style="margin: 2px 0 0 0; font-size: 14px; color: #374151; font-weight: 600;">${eventDate} at ${eventTime}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        } catch (dbErr) {
+            console.error('Error fetching event details for email:', dbErr);
+        }
+
         // Fetch organization's custom template if organizationId is provided
         let emailBody = DEFAULT_EMAIL_TEMPLATE;
         if (organizationId) {
-            const supabase = createAdminClient();
             const { data: org } = await supabase
                 .from('organizations')
                 .select('email_template')
@@ -53,7 +110,8 @@ export async function POST(req: NextRequest) {
         // Replace template variables
         let formattedBody = emailBody
             .replace(/\{name\}/g, name || 'Participant')
-            .replace(/\{org_name\}/g, organizationName || 'Event');
+            .replace(/\{org_name\}/g, organizationName || 'Event')
+            .replace(/\{event_details\}/g, eventDetailsHTML);
 
         // Handle {code_box} specifically
         if (formattedBody.includes('{code_box}')) {

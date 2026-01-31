@@ -1,0 +1,1 @@
+-- Migration reverted as per user request. Event creation is working fine without these changes.

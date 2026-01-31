@@ -4,16 +4,11 @@ import QRCode from 'qrcode'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const DEFAULT_EMAIL_TEMPLATE = `Dear {name},
-
-Thank you for registering with {org_name}! We are excited to have you join us. 
-
+Thank you for registering with {org_name}!
 {event_details}
-
 Your unique participant code is:
 {code_box}
-
-Please find your QR code ticket attached to this email. Present it at the venue for entry.
-
+Please find your QR code ticket attached. Present it at the venue for entry.
 See you at the event!`;
 
 export async function POST(req: NextRequest) {
@@ -64,20 +59,14 @@ export async function POST(req: NextRequest) {
                     });
 
                     eventDetailsHTML = `
-                        <div style="margin: 24px 0; padding: 20px; background-color: #f9fafb; border-radius: 12px; border: 1px solid #e5e7eb;">
-                            <p style="margin: 0 0 10px 0; font-size: 14px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Registered Events</p>
+                        <div style="margin: 15px 0;">
+                            <p style="margin: 0 0 5px 0; font-size: 13px; color: #6b7280; font-weight: 700; text-transform: uppercase;">Registered Events</p>
                             <ul style="margin: 0; padding: 0; list-style-type: none;">
-                                ${eventList.map((name: string) => `<li style="margin-bottom: 6px; color: #111827; font-weight: 500; display: flex; align-items: center;"><span style="color: #7c3aed; margin-right: 8px;">•</span> ${name}</li>`).join('')}
+                                ${eventList.map((name: string) => `<li style="margin-bottom: 2px; color: #111827; font-size: 14px; font-weight: 500;"><span style="color: #7c3aed; margin-right: 6px;">•</span> ${name}</li>`).join('')}
                             </ul>
-                            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                <div>
-                                    <p style="margin: 0; font-size: 11px; color: #6b7280; text-transform: uppercase;">📍 Venue</p>
-                                    <p style="margin: 2px 0 0 0; font-size: 14px; color: #374151; font-weight: 600;">${firstEventData.venue}</p>
-                                </div>
-                                <div>
-                                    <p style="margin: 0; font-size: 11px; color: #6b7280; text-transform: uppercase;">🕒 Time</p>
-                                    <p style="margin: 2px 0 0 0; font-size: 14px; color: #374151; font-weight: 600;">${eventDate} at ${eventTime}</p>
-                                </div>
+                            <div style="margin-top: 10px;">
+                                <p style="margin: 0; font-size: 14px; color: #374151;">📍 <strong>Venue:</strong> ${firstEventData.venue}</p>
+                                <p style="margin: 5px 0 0 0; font-size: 14px; color: #374151;">🕒 <strong>Time:</strong> ${eventDate}, ${eventTime}</p>
                             </div>
                         </div>
                     `;
@@ -103,10 +92,10 @@ export async function POST(req: NextRequest) {
 
         // Styled Ticket Code Box HTML
         const ticketBoxHTML = `
-            <div style="margin: 20px 0; text-align: center;">
-                <div style="padding: 15px 25px; background: #1a1a24; border-radius: 12px; display: inline-block; border: 1px solid #7c3aed40; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <div style="margin: 15px 0; text-align: center;">
+                <div style="padding: 10px 20px; background: #1a1a24; border-radius: 10px; display: inline-block; border: 1px solid #7c3aed40;">
                     <p style="margin: 0; color: #9ca3af; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 2px;">Ticket Code</p>
-                    <p style="margin: 5px 0 0 0; font-family: 'Courier New', monospace; font-size: 24px; font-weight: 700; color: #a78bfa; letter-spacing: 3px;">
+                    <p style="margin: 2px 0 0 0; font-family: 'Courier New', monospace; font-size: 20px; font-weight: 700; color: #a78bfa; letter-spacing: 3px;">
                         ${participantCode}
                     </p>
                 </div>
@@ -136,31 +125,31 @@ export async function POST(req: NextRequest) {
 
         // HTML Email Template - Wraps the custom body in a professional container
         const htmlContent = `
-            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #f0f0f0; border-radius: 16px; overflow: hidden; background-color: #ffffff; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
-                <div style="background: linear-gradient(135deg, #7c3aed, #0891b2); padding: 40px 20px; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">${organizationName || 'Event Ticket'}</h1>
-                    <div style="display: inline-block; margin-top: 15px; padding: 6px 16px; background: rgba(255,255,255,0.15); border-radius: 100px; color: white; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; backdrop-filter: blur(4px);">Registration Confirmed</div>
+            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; border: 1px solid #f0f0f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+                <div style="background: linear-gradient(135deg, #7c3aed, #0891b2); padding: 25px 20px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">${organizationName || 'Event Ticket'}</h1>
+                    <div style="display: inline-block; margin-top: 10px; padding: 4px 12px; background: rgba(255,255,255,0.15); border-radius: 100px; color: white; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; backdrop-filter: blur(4px);">Registration Confirmed</div>
                 </div>
                 
-                <div style="padding: 40px; background-color: #ffffff;">
+                <div style="padding: 25px; background-color: #ffffff;">
                     <!-- Email Content Area -->
-                    <div style="color: #374151; line-height: 1.8; font-size: 16px; white-space: pre-wrap;">${formattedBody}</div>
+                    <div style="color: #374151; line-height: 1.5; font-size: 15px; white-space: pre-wrap;">${formattedBody}</div>
 
                     <!-- Professional Footer/Closing -->
-                    <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #f3f4f6;">
-                        <p style="margin: 0; font-size: 14px; color: #6b7280; font-weight: 500;">Best regards,</p>
-                        <p style="margin: 4px 0 0 0; font-size: 18px; color: #7c3aed; font-weight: 800;">${organizationName} Team</p>
+                    <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #f3f4f6;">
+                        <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 500;">Best regards,</p>
+                        <p style="margin: 2px 0 0 0; font-size: 16px; color: #7c3aed; font-weight: 800;">${organizationName} Team</p>
                     </div>
 
-                    <div style="margin-top: 30px; padding: 15px; background-color: #f9fafb; border-radius: 12px; border-left: 4px solid #7c3aed;">
-                        <p style="margin: 0; font-size: 12px; color: #6b7280; line-height: 1.5;">
-                            <strong>Note:</strong> Your unique QR ticket is attached to this email. Please download it and keep it ready for scanning at the entrance.
+                    <div style="margin-top: 20px; padding: 12px; background-color: #f9fafb; border-radius: 10px; border-left: 4px solid #7c3aed;">
+                        <p style="margin: 0; font-size: 11px; color: #6b7280; line-height: 1.4;">
+                            <strong>Note:</strong> Your unique QR ticket is attached. Please keep it ready for scanning at the entrance.
                         </p>
                     </div>
                 </div>
                 
-                <div style="background-color: #f3f4f6; padding: 25px; text-align: center;">
-                    <p style="margin: 0; font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">
+                <div style="background-color: #f3f4f6; padding: 15px; text-align: center;">
+                    <p style="margin: 0; font-size: 10px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">
                         Powered by <a href="#" style="color: #7c3aed; text-decoration: none;">Attendix</a>
                     </p>
                 </div>

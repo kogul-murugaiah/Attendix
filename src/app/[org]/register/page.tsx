@@ -37,6 +37,7 @@ export default function RegistrationPage() {
     const [members, setMembers] = useState<{ id: string; data: Record<string, any> }[]>([
         { id: crypto.randomUUID(), data: {} }
     ]);
+    const [registeredMembers, setRegisteredMembers] = useState<{ full_name: string; qr_code: string; email: string }[]>([]);
 
     useEffect(() => {
         if (organization) {
@@ -311,8 +312,13 @@ export default function RegistrationPage() {
                 }
             }
 
+            setRegisteredMembers(results.map(r => ({
+                full_name: r.full_name,
+                qr_code: r.qr_code,
+                email: r.email
+            })));
             setParticipantName(teamMode ? teamName : results[0].full_name);
-            setParticipantCode(teamMode ? `TEAM: ${results.length}` : results[0].qr_code);
+            setParticipantCode(teamMode ? teamName : results[0].qr_code);
             setSuccess(true);
             toast.success(teamMode ? "Team Registered Successfully!" : "Registration Successful!");
 
@@ -563,56 +569,114 @@ export default function RegistrationPage() {
     if (success) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#0a0118] relative overflow-hidden">
-                {/* Subtle background gradient */}
-                <div className="absolute inset-0">
-                    <div className="absolute top-20 right-10 w-96 h-96 bg-purple-600/10 rounded-full blur-[100px]" />
-                    <div className="absolute bottom-20 left-10 w-96 h-96 bg-cyan-600/10 rounded-full blur-[100px]" />
+                {/* Dynamic Background Background */}
+                <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute top-1/4 -right-20 w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[120px] animate-pulse" />
+                    <div className="absolute bottom-1/4 -left-20 w-[500px] h-[500px] bg-cyan-600/20 rounded-full blur-[120px] animate-pulse delay-700" />
                 </div>
 
-                <Card className="w-full max-w-md bg-[#1a0f2e]/80 backdrop-blur-xl border border-purple-500/30 relative z-10 shadow-2xl rounded-2xl">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-600 via-fuchsia-600 to-cyan-500" />
+                <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in duration-500">
+                    {/* Main Ticket Card */}
+                    <div className="relative bg-[#1a0f2e]/80 backdrop-blur-2xl border border-white/10 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(139,92,246,0.15)]">
+                        {/* Decorative Top Bar */}
+                        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-purple-600 via-fuchsia-600 to-cyan-500" />
 
-                    <CardHeader className="text-center pb-4 pt-8">
-                        <div className="mx-auto w-16 h-16 bg-gradient-to-br from-purple-600 to-fuchsia-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-purple-600/30">
-                            <CheckCircle className="w-8 h-8 text-white" />
-                        </div>
-                        <CardTitle className="text-2xl font-bold mb-2">
-                            <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400">
-                                Registration Confirmed
-                            </span>
-                        </CardTitle>
-                        <CardDescription className="text-gray-400">
-                            Welcome to {organization.org_name}
-                        </CardDescription>
-                    </CardHeader>
-
-                    <CardContent className="space-y-6 pb-8">
-                        <div className="relative bg-[#0a0118]/50 rounded-xl border border-purple-500/30 p-6">
-                            <div className="flex flex-col items-center gap-3">
-                                <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Participant Code</p>
-                                <div className="text-4xl font-bold text-white tracking-wide font-mono">
-                                    {participantCode}
-                                </div>
-                                <div className="h-px w-full bg-gradient-to-r from-transparent via-purple-500/30 to-transparent my-2" />
-                                <div className="text-center">
-                                    <p className="text-white font-semibold">{participantName}</p>
-                                    <p className="text-gray-500 text-sm mt-1">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                        {/* Success Icon Badge */}
+                        <div className="flex justify-center pt-10 pb-4">
+                            <div className="relative">
+                                <div className="absolute inset-0 bg-purple-600 blur-xl opacity-40 animate-pulse" />
+                                <div className="relative w-20 h-20 bg-gradient-to-br from-purple-600 to-fuchsia-600 rounded-3xl flex items-center justify-center shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500">
+                                    <CheckCircle className="w-10 h-10 text-white" />
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-3 text-center">
-                            <p className="text-gray-400 text-sm">Please save this code for future reference</p>
+                        <div className="text-center px-8 pb-4">
+                            <h2 className="text-3xl font-extrabold tracking-tight">
+                                <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-300 via-white to-cyan-300">
+                                    {organization.team_events_enabled ? "Team Registered!" : "Registration Success!"}
+                                </span>
+                            </h2>
+                            <p className="text-gray-400 mt-2 font-medium">
+                                {organization.org_name}
+                            </p>
+                        </div>
+
+                        {/* The "Ticket" Notched Section */}
+                        <div className="relative px-6 py-8 mt-4">
+                            {/* Notches */}
+                            <div className="absolute top-0 left-[-12px] w-6 h-6 bg-[#0a0118] rounded-full border border-white/10 shadow-inner" />
+                            <div className="absolute top-0 right-[-12px] w-6 h-6 bg-[#0a0118] rounded-full border border-white/10 shadow-inner" />
+
+                            {/* Dotted Separator Line */}
+                            <div className="absolute top-[11px] left-6 right-6 h-px border-t border-dashed border-white/20" />
+
+                            <div className="bg-black/40 backdrop-blur-md rounded-2xl border border-white/5 p-8 relative overflow-hidden group">
+                                {/* Subtle scanline effect */}
+                                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-purple-500/[0.03] to-transparent bg-[length:100%_4px] animate-scan" />
+
+                                <div className="flex flex-col items-center gap-4 relative z-10">
+                                    <span className="text-[10px] font-bold text-purple-400 uppercase tracking-[0.3em] font-mono">
+                                        {organization.team_events_enabled ? "OFFICIAL TEAM ACCESS" : "OFFICIAL ENTRY PASS"}
+                                    </span>
+
+                                    <h3 className="text-4xl font-black text-white tracking-widest font-mono group-hover:scale-105 transition-transform duration-500">
+                                        {participantCode}
+                                    </h3>
+
+                                    <div className="flex flex-col items-center gap-1">
+                                        <p className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-gray-100 to-gray-400">
+                                            {participantName}
+                                        </p>
+                                        <p className="text-xs text-gray-500 flex items-center gap-2">
+                                            <span className="w-1 h-1 bg-cyan-500 rounded-full" />
+                                            {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Team Members Secondary Section */}
+                        {organization.team_events_enabled && registeredMembers.length > 0 && (
+                            <div className="px-8 pb-8 space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-px flex-1 bg-white/10" />
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Roster</span>
+                                    <div className="h-px flex-1 bg-white/10" />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    {registeredMembers.map((member, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/[0.08] hover:border-purple-500/30 transition-all duration-300 group/item">
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold text-gray-200 group-hover/item:text-cyan-400 transition-colors">{member.full_name}</span>
+                                                <span className="text-[10px] text-gray-500">{member.email}</span>
+                                            </div>
+                                            <div className="text-right">
+                                                <code className="text-[11px] font-mono font-bold text-purple-400/80 bg-purple-500/10 px-2 py-0.5 rounded-md">
+                                                    {member.qr_code}
+                                                </code>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="px-8 pb-10 pt-4 flex flex-col gap-4">
                             <Button
                                 onClick={() => window.location.reload()}
-                                variant="outline"
-                                className="w-full bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white border-0 h-12 rounded-lg font-medium shadow-lg shadow-purple-600/20"
+                                className="w-full bg-white text-black hover:bg-gray-200 h-14 rounded-2xl font-bold text-base transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-[0_10px_20px_rgba(255,255,255,0.1)]"
                             >
-                                Register Another Participant
+                                Register Another
                             </Button>
+                            <p className="text-[11px] text-center text-gray-500 italic opacity-60">
+                                Ticket details have been sent to registered email addresses
+                            </p>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             </div>
         );
     }

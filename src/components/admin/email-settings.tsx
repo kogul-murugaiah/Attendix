@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useOrganization } from '@/context/organization-context'
 import { Button } from "@/components/ui/button"
@@ -9,21 +9,17 @@ import { toast } from 'sonner'
 import { Mail, RefreshCw, Save, Info } from 'lucide-react'
 
 const DEFAULT_EMAIL_TEMPLATE = `Dear {name},
-
-Thank you for registering with {org_name}! We are excited to have you join us. 
-
+Thank you for registering with {org_name}!
+{event_details}
 Your unique participant code is:
 {code_box}
-
-Please find your QR code ticket attached to this email. Present it at the venue for entry.
-
+Please find your QR code ticket attached. Present it at the venue for entry.
 See you at the event!`;
 
 export default function EmailSettings() {
     const { organization, refresh } = useOrganization()
     const supabase = createClient()
     const [template, setTemplate] = useState('')
-    const [loading, setLoading] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
 
     useEffect(() => {
@@ -58,8 +54,8 @@ export default function EmailSettings() {
     if (!organization) return null
 
     return (
-        <div className="space-y-8">
-            <div className="relative overflow-hidden rounded-2xl p-[1px] bg-gradient-to-br from-purple-500/30 via-transparent to-cyan-500/30 font-sans">
+        <div className="space-y-8 font-sans text-left">
+            <div className="relative overflow-hidden rounded-2xl p-[1px] bg-gradient-to-br from-purple-500/30 via-transparent to-cyan-500/30">
                 <div className="relative bg-[#13131a]/90 backdrop-blur-xl rounded-2xl p-8 border border-white/5">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                         <div>
@@ -107,16 +103,17 @@ export default function EmailSettings() {
                                 />
                             </div>
 
-                            <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4 flex gap-3 items-start">
+                            <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4 flex gap-3 items-start text-left">
                                 <Info className="w-5 h-5 text-purple-400 mt-0.5" />
                                 <div>
                                     <h4 className="text-sm font-semibold text-purple-300 uppercase tracking-wider mb-1">Available Variables</h4>
                                     <p className="text-xs text-purple-300/60 leading-relaxed mb-2">Use these placeholders to dynamically insert participant and event details.</p>
-                                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                                        <code className="bg-black/40 px-2 py-1 rounded text-purple-400 text-xs border border-purple-500/10">{"{name}"}</code>
-                                        <code className="bg-black/40 px-2 py-1 rounded text-purple-400 text-xs border border-purple-500/10">{"{code}"}</code>
-                                        <code className="bg-black/40 px-2 py-1 rounded text-purple-400 text-xs border border-purple-500/10">{"{org_name}"}</code>
-                                        <code className="bg-black/40 px-2 py-1 rounded text-cyan-400 text-xs border border-cyan-500/10 font-bold">{"{code_box}"}</code>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                                        <code className="bg-black/40 px-2 py-1 rounded text-purple-400 text-xs border border-purple-500/10 text-center">{"{name}"}</code>
+                                        <code className="bg-black/40 px-2 py-1 rounded text-purple-400 text-xs border border-purple-500/10 text-center">{"{code}"}</code>
+                                        <code className="bg-black/40 px-2 py-1 rounded text-purple-400 text-xs border border-purple-500/10 text-center">{"{org_name}"}</code>
+                                        <code className="bg-black/40 px-2 py-1 rounded text-cyan-400 text-xs border border-cyan-500/10 font-bold text-center">{"{event_details}"}</code>
+                                        <code className="bg-black/40 px-2 py-1 rounded text-cyan-400 text-xs border border-cyan-500/10 font-bold text-center">{"{code_box}"}</code>
                                     </div>
                                 </div>
                             </div>
@@ -125,71 +122,83 @@ export default function EmailSettings() {
                         {/* Preview Section */}
                         <div className="space-y-4">
                             <label className="text-sm font-medium text-gray-300 block">Live Preview (Demo Data)</label>
-                            <div className="bg-[#0a0a0f] border border-white/10 rounded-xl overflow-hidden flex flex-col min-h-[400px] shadow-2xl">
+                            <div className="bg-[#0a0a0f] border border-white/10 rounded-xl overflow-hidden shadow-2xl flex flex-col min-h-[400px]">
                                 {/* Email Mockup Header */}
                                 <div className="bg-white/5 border-b border-white/5 p-4 flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-cyan-600 flex items-center justify-center">
-                                            <Mail className="w-4 h-4 text-white" />
+                                    <div className="flex items-center gap-3 text-left">
+                                        <div className="w-6 h-6 rounded bg-gradient-to-br from-purple-600 to-cyan-600 flex items-center justify-center">
+                                            <Mail className="w-3 h-3 text-white" />
                                         </div>
                                         <div>
-                                            <div className="text-xs font-semibold text-white">Your Ticket for {organization.org_name}</div>
-                                            <div className="text-[10px] text-gray-500">From: teamattendix@gmail.com</div>
+                                            <div className="text-[10px] font-semibold text-white">Your Ticket for {organization.org_name}</div>
+                                            <div className="text-[8px] text-gray-500">From: teamattendix@gmail.com</div>
                                         </div>
                                     </div>
-                                    <div className="text-[10px] text-gray-600 font-mono">Just now</div>
+                                    <div className="text-[8px] text-gray-600 font-mono">Just now</div>
                                 </div>
 
                                 {/* Email Mockup Content */}
-                                <div className="p-8 bg-white/5 flex-1 overflow-y-auto font-sans text-gray-700">
-                                    <div className="bg-white rounded-lg p-6 shadow-sm border border-black/5">
-                                        {/* Preview Body content with dynamic box */}
-
-                                        {/* Preview Body content with dynamic box */}
-                                        <div className="whitespace-pre-wrap text-sm text-gray-600 leading-relaxed mb-8 text-left">
+                                <div className="p-4 bg-white/5 flex-1 overflow-y-auto">
+                                    <div className="bg-white rounded-lg p-6 shadow-sm border border-black/5 text-left">
+                                        <div className="whitespace-pre-wrap text-sm text-gray-600 leading-relaxed mb-8">
                                             {(() => {
                                                 const ticketBoxPreview = (
-                                                    <div className="my-6 text-center">
-                                                        <div className="p-4 bg-[#1a1a24] rounded-xl border border-purple-500/20 inline-block text-center shadow-lg">
-                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">Ticket Code</p>
-                                                            <p className="text-xl font-mono font-bold text-purple-400 tracking-wider">XPL-042</p>
+                                                    <div key="ticket-box-preview" className="my-4 text-center">
+                                                        <div className="p-3 bg-[#1a1a24] rounded-lg border border-purple-500/20 inline-block text-center shadow-lg">
+                                                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">Ticket Code</p>
+                                                            <p className="text-lg font-mono font-bold text-purple-400 tracking-wider">XPL-042</p>
                                                         </div>
                                                     </div>
                                                 );
 
-                                                const textWithVars = template
+                                                const eventDetailsPreview = (
+                                                    <div key="event-details-preview" style={{ margin: '15px 0' }}>
+                                                        <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#6b7280', fontWeight: '700', textTransform: 'uppercase' }}>Registered Events</p>
+                                                        <ul style={{ margin: '0', padding: '0', listStyleType: 'none' }}>
+                                                            <li style={{ marginBottom: '2px', color: '#111827', fontSize: '14px', fontWeight: '500', display: 'flex', alignItems: 'center' }}><span style={{ color: '#7c3aed', marginRight: '6px' }}>•</span> Workshop on AI</li>
+                                                            <li style={{ color: '#111827', fontSize: '14px', fontWeight: '500', display: 'flex', alignItems: 'center' }}><span style={{ color: '#7c3aed', marginRight: '6px' }}>•</span> Hackathon 2026</li>
+                                                        </ul>
+                                                        <div style={{ marginTop: '10px' }}>
+                                                            <p style={{ margin: '0', fontSize: '14px', color: '#374151' }}>📍 <strong>Venue:</strong> Main Auditorium</p>
+                                                            <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#374151' }}>🕒 <strong>Time:</strong> Monday, Feb 2nd, 10:00 AM</p>
+                                                        </div>
+                                                    </div>
+                                                );
+
+                                                let renderedText = template
                                                     .replace(/\{name\}/g, 'John Doe')
                                                     .replace(/\{code\}/g, 'XPL-042')
                                                     .replace(/\{org_name\}/g, organization.org_name);
 
-                                                if (textWithVars.includes('{code_box}')) {
-                                                    const parts = textWithVars.split('{code_box}');
-                                                    return (
-                                                        <>
-                                                            {parts[0]}
-                                                            {ticketBoxPreview}
-                                                            {parts[1]}
-                                                        </>
-                                                    );
+                                                const parts = renderedText.split(/(\{event_details\}|\{code_box\})/g);
+                                                const result: React.ReactNode[] = [];
+
+                                                parts.forEach((part, i) => {
+                                                    if (part === '{event_details}') {
+                                                        result.push(eventDetailsPreview);
+                                                    } else if (part === '{code_box}') {
+                                                        result.push(ticketBoxPreview);
+                                                    } else {
+                                                        result.push(<span key={i}>{part}</span>);
+                                                    }
+                                                });
+
+                                                if (!renderedText.includes('{code_box}')) {
+                                                    result.push(ticketBoxPreview);
                                                 }
 
-                                                return (
-                                                    <>
-                                                        {textWithVars}
-                                                        {ticketBoxPreview}
-                                                    </>
-                                                );
+                                                return result;
                                             })()}
                                         </div>
 
                                         {/* Preview Closing */}
-                                        <div className="border-t border-gray-100 pt-6 text-left">
-                                            <p className="text-[13px] font-semibold text-gray-500 m-0">Best regards,</p>
-                                            <p className="text-base font-bold text-purple-600 m-0">{organization.org_name} Team</p>
+                                        <div className="border-t border-gray-100 pt-4 text-left">
+                                            <p className="text-[12px] font-semibold text-gray-500 m-0">Best regards,</p>
+                                            <p className="text-sm font-bold text-purple-600 m-0">{organization.org_name} Team</p>
                                         </div>
 
-                                        <div className="mt-6 pt-4 border-t border-gray-50 border-l-4 border-purple-400 bg-gray-50/50 p-3 rounded-r-lg italic text-[11px] text-gray-500 text-left">
-                                            <strong>Note:</strong> Your unique QR ticket is attached to this email. Please download it and keep it ready for scanning at the entrance.
+                                        <div className="mt-4 pt-3 border-t border-gray-50 border-l-4 border-purple-400 bg-gray-50/50 p-2.5 italic text-[10px] text-gray-500">
+                                            <strong>Note:</strong> Your unique QR ticket is attached. Please keep it ready for scanning at the entrance.
                                         </div>
                                     </div>
                                 </div>

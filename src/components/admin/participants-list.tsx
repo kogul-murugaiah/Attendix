@@ -40,6 +40,7 @@ export default function ParticipantsTab() {
     const [sendingEmailId, setSendingEmailId] = useState<string | null>(null)
     const [deletingId, setDeletingId] = useState<string | null>(null)
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+    const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
     const [participantToDelete, setParticipantToDelete] = useState<Participant | null>(null)
     const [editFormData, setEditFormData] = useState({
         name: '',
@@ -144,6 +145,7 @@ export default function ParticipantsTab() {
 
     }
 
+
     const handleDeleteParticipant = async () => {
         if (!participantToDelete || !organization) return
         setLoading(true)
@@ -176,6 +178,33 @@ export default function ParticipantsTab() {
         } finally {
             setLoading(false)
             setDeletingId(null)
+        }
+    }
+
+    const handleResetRegistration = async () => {
+        if (!organization) return
+        setLoading(true)
+
+        try {
+            // Delete all records from student_registrations for this org
+            // Cascades will handle event_registrations and scan_logs
+            const { error } = await supabase
+                .from('student_registrations')
+                .delete()
+                .eq('organization_id', organization.id)
+
+            if (error) {
+                toast.error('Failed to reset registration: ' + error.message)
+            } else {
+                toast.success('Registration data reset successfully')
+                setParticipants([])
+                setResetConfirmOpen(false)
+            }
+        } catch (error: any) {
+            console.error('Error resetting registration:', error)
+            toast.error('An error occurred during reset')
+        } finally {
+            setLoading(false)
         }
     }
 
@@ -466,6 +495,15 @@ export default function ParticipantsTab() {
                 }}>
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Retry Failed Emails ({participants.filter(p => p.email_status === 'failed').length})
+                </Button>
+                <Button
+                    variant="outline"
+                    className="border-red-600/20 bg-red-600/10 text-red-500 hover:bg-red-600/20 hover:text-red-400 rounded-xl backdrop-blur-md"
+                    onClick={() => setResetConfirmOpen(true)}
+                    disabled={loading || participants.length === 0}
+                >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Reset Registration
                 </Button>
             </div>
 
@@ -790,6 +828,42 @@ export default function ParticipantsTab() {
                                 className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl shadow-lg shadow-red-900/20"
                             >
                                 {loading ? 'Deleting...' : 'Delete'}
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Reset Confirmation Dialog */}
+            <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+                <DialogContent className="bg-[#13131a]/95 backdrop-blur-xl border border-white/10 text-white sm:max-w-[400px] shadow-2xl shadow-red-900/40">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold text-red-500">Reset All Registration Data?</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-4">
+                        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                            <p className="text-red-400 text-xs font-bold uppercase tracking-widest mb-1">Warning: Irreversible Action</p>
+                            <p className="text-gray-300 text-sm leading-relaxed">
+                                This will permanently delete <span className="text-white font-bold">ALL {participants.length} participants</span>, their event registrations, and all attendance scan logs for <span className="text-cyan-400 font-bold underline">{organization?.org_name}</span>.
+                            </p>
+                        </div>
+                        <p className="text-gray-400 text-[10px] italic leading-tight">
+                            Security Note: Database policies (RLS) and the request filter strictly ensure that ONLY data belonging to <span className="text-white font-medium">{organization?.org_name}</span> is touched. Other organizations remain unaffected.
+                        </p>
+                        <div className="flex gap-3 pt-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => setResetConfirmOpen(false)}
+                                className="flex-1 bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white rounded-xl"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleResetRegistration}
+                                disabled={loading}
+                                className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl shadow-lg shadow-red-900/20"
+                            >
+                                {loading ? 'Resetting...' : 'Yes, Delete Everything'}
                             </Button>
                         </div>
                     </div>

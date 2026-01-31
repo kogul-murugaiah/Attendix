@@ -15,6 +15,12 @@
   --animate-glow: glow 2s ease-in-out infinite;
   --animate-slide-up: slideUp 0.5s ease-out forwards;
   --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-scan: scan 3s linear infinite;
+
+  @keyframes scan {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+  }
 
   @keyframes float {
     0%, 100% { transform: translateY(0px); }

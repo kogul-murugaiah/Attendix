@@ -21,6 +21,7 @@ export type Organization = {
     registration_open: boolean
     email_template?: string | null
     features?: Record<string, boolean>
+    code_prefix?: string | null
     created_at: string
 }
 

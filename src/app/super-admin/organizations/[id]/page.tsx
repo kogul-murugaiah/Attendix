@@ -78,6 +78,8 @@ export default async function OrgDetailsPage(props: { params: Promise<{ id: stri
         const contactPerson = formData.get('contact_person') as string
         const contactEmail = formData.get('contact_email') as string
         const billingEmail = formData.get('billing_email') as string
+        const codePrefix = formData.get('code_prefix') as string
+        const orgCode = formData.get('org_code') as string
 
         await supabase
             .from('organizations')
@@ -90,6 +92,8 @@ export default async function OrgDetailsPage(props: { params: Promise<{ id: stri
                 contact_person: contactPerson,
                 contact_email: contactEmail,
                 billing_email: billingEmail,
+                code_prefix: codePrefix,
+                org_code: orgCode,
                 updated_at: new Date().toISOString()
             })
             .eq('id', id)

@@ -19,6 +19,7 @@ interface Organization {
     id: string
     org_code: string
     org_name: string
+    code_prefix?: string | null
     subscription_plan: string
     subscription_status: string
     created_at: string
@@ -59,7 +60,8 @@ export function OrgTable({ organizations }: OrgTableProps) {
     // Filter organizations
     const filteredOrgs = organizations.filter(org => {
         const matchesSearch = org.org_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            org.org_code.toLowerCase().includes(searchQuery.toLowerCase())
+            org.org_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (org.code_prefix && org.code_prefix.toLowerCase().includes(searchQuery.toLowerCase()))
         const matchesStatus = statusFilter === 'all' || org.subscription_status === statusFilter
         return matchesSearch && matchesStatus
     })
@@ -91,7 +93,7 @@ export function OrgTable({ organizations }: OrgTableProps) {
                     <TableHeader>
                         <TableRow className="border-white/10 hover:bg-white/5">
                             <TableHead className="text-gray-400">Organization</TableHead>
-                            <TableHead className="text-gray-400">Code</TableHead>
+                            <TableHead className="text-gray-400">Code Prefix</TableHead>
                             <TableHead className="text-gray-400">Plan</TableHead>
                             <TableHead className="text-gray-400">Status</TableHead>
                             <TableHead className="text-gray-400">Created</TableHead>
@@ -105,7 +107,7 @@ export function OrgTable({ organizations }: OrgTableProps) {
                                     {org.org_name}
                                 </TableCell>
                                 <TableCell className="text-gray-400 font-mono text-xs">
-                                    {org.org_code}
+                                    {org.org_code.toUpperCase()}
                                 </TableCell>
                                 <TableCell>
                                     <Badge variant="outline" className="border-purple-500/30 text-purple-400">

@@ -126,14 +126,36 @@ export function OrgDetailsForm({ org, updateOrgAction, primaryAdmin, updateAdmin
                     </CardContent>
                 </Card>
 
-                {/* Limits */}
+                {/* Identity & Prefix */}
                 <Card className="bg-[#13131a] border-white/10">
                     <CardHeader>
-                        <CardTitle className="text-white">Resource Limits</CardTitle>
-                        <CardDescription className="text-gray-400">Override default plan limits</CardDescription>
+                        <CardTitle className="text-white">Organization Identity</CardTitle>
+                        <CardDescription className="text-gray-400">Manage the organization's unique code and registration prefix</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="space-y-2">
+                        <div className="space-y-2 pb-2">
+                            <Label className="text-purple-400 text-xs uppercase tracking-wider font-bold">Code Prefix</Label>
+                            <Input
+                                name="org_code"
+                                defaultValue={org.org_code}
+                                className="bg-black/50 border-purple-500/20 text-white font-mono h-11 text-lg uppercase"
+                            />
+                            <p className="text-[11px] text-gray-400 italic mt-1">
+                                This code is used for the organization's dashboard URL and as the prefix for all participant IDs.
+                            </p>
+                            <div className="flex flex-col gap-1.5 p-3 rounded-lg bg-purple-500/5 border border-purple-500/10 mt-3">
+                                <div className="flex justify-between items-center text-[10px]">
+                                    <span className="text-gray-500 uppercase font-medium">Dashboard URL Preview</span>
+                                    <span className="text-purple-400 font-mono tracking-tight">/{org.org_code}/admin</span>
+                                </div>
+                                <div className="flex justify-between items-center text-[10px]">
+                                    <span className="text-gray-500 uppercase font-medium">Participant ID Preview</span>
+                                    <span className="text-cyan-400 font-mono tracking-tight">{org.org_code.toUpperCase()}-001</span>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-red-400/80 italic mt-3">WARNING: Changing this will break existing registration links and dashboard access URLs.</p>
+                        </div>
+                        <div className="space-y-2 border-t border-white/5 pt-4">
                             <Label className="text-gray-400">Max Events</Label>
                             <Input
                                 name="max_events"

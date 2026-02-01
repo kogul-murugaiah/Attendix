@@ -23,22 +23,32 @@ export async function POST(request: Request) {
         }
 
         // Check staff limit before creating
-        const { data: org } = await supabaseAdmin
+        const { data: org, error: orgFetchError } = await supabaseAdmin
             .from('organizations')
-            .select('max_staff')
+            .select('max_staff, org_name, subscription_plan')
             .eq('id', organization_id)
             .single()
 
-        const { count: staffCount } = await supabaseAdmin
+        if (orgFetchError || !org) {
+            return NextResponse.json({
+                error: 'Organization not found. Please ensure you are logged in to a valid organization.'
+            }, { status: 404 })
+        }
+
+        const { count: staffCount, error: countError } = await supabaseAdmin
             .from('staff')
             .select('*', { count: 'exact', head: true })
             .eq('organization_id', organization_id)
 
-        const maxStaff = org?.max_staff || 5 // Default to free plan
+        if (countError) {
+            return NextResponse.json({ error: 'Failed to verify staff count' }, { status: 500 })
+        }
+
+        const maxStaff = org.max_staff ?? 5 // Fallback only if column is null
 
         if (staffCount !== null && staffCount >= maxStaff) {
             return NextResponse.json({
-                error: `Staff limit reached! Your plan allows only ${maxStaff} staff members. Please upgrade your plan.`
+                error: `Staff limit reached! Your ${org.subscription_plan} plan allows only ${maxStaff} staff members. (Current count: ${staffCount}). Please upgrade your plan.`
             }, { status: 400 })
         }
 

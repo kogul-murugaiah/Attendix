@@ -190,7 +190,6 @@ export default function FieldConfigDrawer({
                             id="required"
                             checked={formData.is_required}
                             onCheckedChange={(c) => setFormData({ ...formData, is_required: c as boolean })}
-                            disabled={field?.is_locked}
                             className="border-white/20 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 w-5 h-5 rounded-md"
                         />
                         <div className="space-y-0.5">

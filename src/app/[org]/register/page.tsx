@@ -269,28 +269,31 @@ export default function RegistrationPage() {
 
                 if (!coreData.full_name) coreData.full_name = memberData['full_name'] || '-';
 
-                const { data: insertedData, error } = await supabase
-                    .from('student_registrations')
-                    .insert(coreData)
-                    .select('id, qr_code')
-                    .single();
+                const finalEvents = teamMode ? leadEventIds : Array.from(new Set(selectedEvents));
+
+                const { data: insertedData, error } = await supabase.rpc('register_participant', {
+                    p_organization_id: organization.id,
+                    p_full_name: coreData.full_name,
+                    p_email: coreData.email,
+                    p_phone: coreData.phone,
+                    p_college: coreData.college,
+                    p_department: coreData.department,
+                    p_year_of_study: coreData.year_of_study,
+                    p_event_ids: finalEvents,
+                    p_team_name: coreData.team_name,
+                    p_registration_group_id: coreData.registration_group_id,
+                    p_custom_data: coreData.custom_data,
+                    p_form_id: formId
+                }).single() as { data: { id: string, qr_code: string } | null, error: any };
 
                 if (error) {
                     if (error.code === '23505') throw new Error(`Email ${coreData.email} is already registered.`);
                     throw error;
                 }
 
-                results.push({ ...insertedData, full_name: coreData.full_name, email: coreData.email });
+                if (!insertedData) throw new Error("Registration failed to return data");
 
-                if (selectedEvents.length > 0 || (teamMode && leadEventIds.length > 0)) {
-                    const finalEvents = teamMode ? leadEventIds : Array.from(new Set(selectedEvents));
-                    const eventInserts = finalEvents.map(eid => ({
-                        participant_id: insertedData.id,
-                        event_id: eid,
-                        attendance_status: false
-                    }));
-                    await supabase.from('event_registrations').insert(eventInserts);
-                }
+                results.push({ ...insertedData, full_name: coreData.full_name, email: coreData.email });
 
                 // Trigger Email Sending (Individual)
                 if (coreData.email) {

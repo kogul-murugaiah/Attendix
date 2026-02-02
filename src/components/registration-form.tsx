@@ -97,53 +97,28 @@ export default function RegistrationForm({ organizationId }: { organizationId?: 
             // Generate QR
             const qrDataUrl = await QRCode.toDataURL(code, { width: 300, margin: 2 })
 
-            // Insert into the active student_registrations table
-            const { data, error } = await supabase
-                .from('student_registrations')
-                .insert({
-                    organization_id: targetOrgId,
-                    qr_code: code,
-                    full_name: formData.name,
-                    email: formData.email,
-                    phone: formData.phone,
-                    college: formData.college,
-                    department: formData.department,
-                    year_of_study: formData.year_of_study,
-                    status: 'pending',
-                    custom_data: {
-                        // event_ids are now stored in event_registrations table
-                    }
-                })
-                .select('id')
-                .single()
+            // Insert using the secure RPC
+            const selectedEventIds = [formData.event1_id, formData.event2_id, formData.event3_id].filter(id => id);
+
+            const { data, error } = await supabase.rpc('register_participant', {
+                p_organization_id: targetOrgId,
+                p_full_name: formData.name,
+                p_email: formData.email,
+                p_phone: formData.phone,
+                p_college: formData.college,
+                p_department: formData.department,
+                p_year_of_study: formData.year_of_study,
+                p_event_ids: selectedEventIds,
+                p_custom_data: {}
+            }).single() as { data: { id: string, qr_code: string } | null, error: any };
 
             if (error) {
                 throw error
             }
 
+            if (!data) throw new Error("Registration failed to return data");
+
             const participantId = data.id
-
-            // Insert Event Registrations (Source of Truth for Attendance/Scanning)
-            const selectedEventIds = [formData.event1_id, formData.event2_id, formData.event3_id].filter(id => id);
-
-            if (selectedEventIds.length > 0) {
-                const eventInserts = selectedEventIds.map(eid => ({
-                    participant_id: participantId,
-                    event_id: eid,
-                    attendance_status: false
-                }));
-
-                const { error: eventError } = await supabase
-                    .from('event_registrations')
-                    .insert(eventInserts);
-
-                if (eventError) {
-                    console.error('Error inserting event registrations:', eventError);
-                    // Optional: Consider if we should throw or just log? 
-                    // For now, log but continue so we don't block the user success screen, 
-                    // but ideally this transaction should be atomic.
-                }
-            }
 
             // Success
             setSuccessData({
